@@ -7,7 +7,7 @@ void test(){
 int main()
 {
 
-    http_addroute("/", &test);
+    http_addroute("/", &test, "GET");
 
     http_addfolder("/");
 

@@ -21,8 +21,15 @@ struct http_header
 	char* parameters;
 };
 
+struct http_route
+{
+	char* route;
+	char* method;
+	void (*http_routefunction)();
+};
+
 void http_addfolder(char* folder);
-void http_addroute(char* route, void (*f)());
+void http_addroute(char* path, void (*f)(), char* method);
 void http_routehandler();
 void http_sendfile(char* file);
 void http_start(int port, int debugmode);

@@ -23,16 +23,17 @@
 
     http_routes is a list of added routes, it is mirrored with http_routefunctions which
     is a array that counts a pointer to function that is called when a route is accessed.
-    http_clientcounter is a counter for how many routes has been added.
+    http_routecounter is a counter for how many routes has been added.
 
     To add routes use http_addroute(char* route, void (*f)());
 
     Example: http_addroute("/dog", &dog);
 */
 int http_client = -1;
-char* http_routes[NUMBER_OF_ROUTES];
-int http_clientcounter = 0;
-void (*http_routefunctions[NUMBER_OF_ROUTES])();
+struct http_route* http_routes[NUMBER_OF_ROUTES];
+int http_routecounter = 0;
+
+int server_fd;
 
 /*
     http_folders contains names of folders that are able to be accessed throuhg indexing.
@@ -80,11 +81,15 @@ void http_404(){
     PARAMS: name of route, function pointer.
     Returns: VOID
 */
-void http_addroute(char* route, void (*f)()){
+void http_addroute(char* path, void (*f)(), char* method){
 
-    http_routes[http_clientcounter] = route;
-    http_routefunctions[http_clientcounter] = f;
-    http_clientcounter++;
+    struct http_route* route = malloc(sizeof(struct http_route));
+    route->method = method;
+    route->route = path;
+    route->http_routefunction = f;
+
+    http_routes[http_routecounter] = route;
+    http_routecounter++;
 
 }
 
@@ -126,10 +131,11 @@ void http_routehandler(){
         return;
     }
 
-    for (int i = 0; i < http_clientcounter; ++i)
+    for (int i = 0; i < http_routecounter; ++i)
     {
-        if(strcmp(header.route, http_routes[i]) == 0){
-            (*http_routefunctions[i])();
+        // checks if both route and method is correct.
+        if((strcmp(header.route, http_routes[i]->route) == 0) && (strcmp(header.method, http_routes[i]->method) == 0)){
+            (*(http_routes[i]->http_routefunction))();
             return;
         }
     }
@@ -149,6 +155,18 @@ void http_routehandler(){
         }
     }
     http_404();
+}
+
+
+void intHandler(){
+    printf("\n%s\n", "[SHUTDOWN] Server is shutting down...");
+    for (int i = 0; i < http_routecounter; ++i)
+    {
+        free(http_routes[http_routecounter]);
+    }
+    close(server_fd);
+    printf("%s\n", "[SHUTDOWN] Goodbye.");
+    exit(0);
 }
 
 /*
@@ -236,7 +254,6 @@ void http_start(int PORT, int debugmode){
 
     
     //Define sockets
-    int server_fd;
     long valread;
     /*
     The htons() function makes sure that numbers are stored in memory in network byte order, which is with the most significant byte first.
@@ -290,6 +307,9 @@ void http_start(int PORT, int debugmode){
     }
 
     printf("%s\n", "[STARTUP] Server now accepting requests...");
+
+    signal(SIGINT, intHandler);
+
     //listen loop
     while(1)
     {
