@@ -97,18 +97,18 @@ void http_addfolder(char* folder){
     If none of the above occur 404 will be returned.
 
 
-    PARAMS: name of route
+    PARAMS: 
     Returns: VOID
 */
-void http_routehandler(char* route){
-    if(strcmp(header.route, "POST") == 0){
+void http_routehandler(){
 
+    if(strcmp(header.method, "POST") == 0){
         return;
     }
 
     for (int i = 0; i < http_clientcounter; ++i)
     {
-        if(strcmp(route, http_routes[i]) == 0){
+        if(strcmp(header.route, http_routes[i]) == 0){
             (*http_routefunctions[i])();
             return;
         }
@@ -116,14 +116,13 @@ void http_routehandler(char* route){
 
     for (int i = 0; i < http_foldercount; ++i)
     {
-        if(strstr(route, http_folders[i]) != NULL){
-
+        if(strstr(header.route, http_folders[i]) != NULL){
             // add . inforont of path
-            char file[strlen(route)+2];
+            char file[strlen(header.route)+2];
             char* dot = ".";
             strcpy(file, dot);
-            strcat(file, route);
-            file[strlen(route)+2] = 0;
+            strcat(file, header.route);
+            file[strlen(header.route)+2] = 0;
 
             http_sendfile(file);
             return;
@@ -298,7 +297,7 @@ void http_start(int PORT, int debugmode){
 
         if(fork() == 0){
             // child
-            http_routehandler(get);
+            http_routehandler();
             close(server_fd);
             exit(1);
         }

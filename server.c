@@ -7,9 +7,9 @@ void test(){
 int main()
 {
 
-    http_addroute("/joe", &test);
+    http_addroute("/", &test);
 
-    http_addfolder("testdir");
+    http_addfolder("/");
 
     // http_start(PORT, DEBUG)
     http_start(8080, 1);

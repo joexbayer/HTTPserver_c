@@ -21,7 +21,7 @@ struct http_header
 
 void http_addfolder(char* folder);
 void http_addroute(char* route, void (*f)());
-void http_routehandler(char* route);
+void http_routehandler();
 void http_sendfile(char* file);
 void http_start(int port, int debugmode);
 
