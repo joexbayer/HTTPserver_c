@@ -12,11 +12,13 @@
 
 #define NUMBER_OF_ROUTES 50
 #define NUMBER_OF_FOLDERS 50
+#define HTTP_BUFFER_SIZE 2048
 
 struct http_header
 {
 	char* method;
 	char* route;
+	char* parameters;
 };
 
 void http_addfolder(char* folder);

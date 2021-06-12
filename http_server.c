@@ -3,6 +3,24 @@
 // todo: POST / GET, enable global indexing with addfoler("/"), ? delimiter as function paramters.
 
 /*
+    Hypertext Transfer Protocol (HTTP/1.1): Message Syntax and Routing
+    https://datatracker.ietf.org/doc/html/rfc7230
+
+    Hypertext Transfer Protocol (HTTP/1.1): Semantics and Content
+    https://datatracker.ietf.org/doc/html/rfc7231
+
+    Hypertext Transfer Protocol (HTTP/1.1): Conditional Requests
+    https://datatracker.ietf.org/doc/html/rfc7232
+
+    Hypertext Transfer Protocol (HTTP/1.1): Range Requests
+    https://datatracker.ietf.org/doc/html/rfc7233
+
+    Hypertext Transfer Protocol (HTTP/1.1): Caching
+    https://datatracker.ietf.org/doc/html/rfc7234
+
+    Hypertext Transfer Protocol (HTTP/1.1): Authentication
+    https://datatracker.ietf.org/doc/html/rfc7235
+
     http_routes is a list of added routes, it is mirrored with http_routefunctions which
     is a array that counts a pointer to function that is called when a route is accessed.
     http_clientcounter is a counter for how many routes has been added.
@@ -95,6 +113,8 @@ void http_addfolder(char* folder){
     includes the folder name.
 
     If none of the above occur 404 will be returned.
+
+
 
 
     PARAMS: 
@@ -285,14 +305,21 @@ void http_start(int PORT, int debugmode){
             printf("%s", "[DEBUG] Incomming request for ");
 
         //prepare buffer
-        char buffer[3000000] = {0};
-        valread = read(http_client, buffer, 3000000);
+        char buffer[HTTP_BUFFER_SIZE] = {0};
+        valread = read(http_client, buffer, HTTP_BUFFER_SIZE);
 
         printf("%s\n", buffer);
 
         char* get = strtok(buffer, " ");
         header.method = get;
         get = strtok(NULL, " ");
+
+        if(strstr(get, "?") != NULL){
+            char* paramters = strtok(get, "?");
+            paramters = strtok(NULL, "?");
+            header.parameters = paramters;
+            printf("%s\n", header.parameters);
+        }
         header.route = get;
 
         if(fork() == 0){
