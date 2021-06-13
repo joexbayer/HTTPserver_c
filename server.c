@@ -1,21 +1,27 @@
 #include "http_server.h"
 
-void test(){
-    char* age = http_getparameter("age");
-    char* name = http_getparameter("name");
-
-    printf("%s\n", name);
-    printf("%s\n", age);
-
-
+void home(){
 
     http_sendfile("index.html");
+}
+
+void login(){
+    char* username = http_getparameter("username");
+    char* password = http_getparameter("password");
+
+    if(strcmp(username, "joe") == NULL && strcmp(password, "123") == NULL){
+        
+        http_sendfile("index.html");
+    }
+    http_404();
 }
 
 int main()
 {
 
-    http_addroute("/", &test, "GET");
+    http_addroute("GET", "/", &home);
+
+    http_addroute("POST", "/login", &login);
 
     http_addfolder("/");
 

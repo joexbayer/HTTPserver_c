@@ -81,7 +81,7 @@ void http_404(){
     PARAMS: name of route, function pointer.
     Returns: VOID
 **************************************************************/
-void http_addroute(char* path, void (*f)(), char* method){
+void http_addroute(char* method, char* path, void (*f)()){
 
     struct http_route* route = malloc(sizeof(struct http_route));
     route->method = method;
@@ -127,10 +127,6 @@ void http_addfolder(char* folder){
 **************************************************************/
 void http_route_handler(){
 
-    if(strcmp(header.method, "POST") == 0){
-        return;
-    }
-
     for (int i = 0; i < http_routecounter; ++i)
     {
         // checks if both route and method is correct.
@@ -142,7 +138,7 @@ void http_route_handler(){
 
     for (int i = 0; i < http_foldercount; ++i)
     {
-        if(strstr(header.route, http_folders[i]) != NULL){
+        if(strstr(header.route, http_folders[i]) != NULL && strcmp(header.method, "POST") != 0){
             // add . inforont of path
             char file[strlen(header.route)+2];
             char* dot = ".";
@@ -269,6 +265,56 @@ void http_sendfile(char* file){
 /**************************************************************
     Summery: 
 
+    Parses the given http request, and fills http_header.
+    
+    PARAMS: request buffer
+    Returns: VOID
+**************************************************************/
+void http_parser(char* buffer){
+    // get method
+    char* get = strtok(buffer, " ");
+    header.method = get;
+    get = strtok(NULL, " ");
+
+    // check for url parameters
+    if(strstr(get, "?") != NULL){
+        char* parameters = strtok(get, "?");
+        parameters = strtok(NULL, "?");
+        header.parameters = parameters;
+    }
+    header.route = get;
+
+    // check all lines
+    char* line = strtok(NULL, "\n");
+    char* content_type_raw;
+    char* content;
+    while(line != NULL){
+
+        // content type
+        if(strstr(line, "Content-Type") != NULL){
+            content_type_raw = line;
+        }
+        content = line;
+        line = strtok(NULL, "\n");
+    }
+
+    // get http content type
+    char* content_type = strtok(content_type_raw, " ");
+    content_type = strtok(NULL, " ");
+    header.content_type = content_type;
+
+    // if content type is from form, set content has parameters
+    if(strcmp(header.content_type, "application/x-www-form-urlencoded") != NULL){
+        header.parameters = content;
+    }
+    header.content = content;
+
+    http_route_handler();
+}
+
+/**************************************************************
+    Summery: 
+
     Creates tcp socket with given port and will set global variables.
     After tcp socket is created it will accept clients then create a new chil process to handle request.
     While parent process keeps accepting new clients.
@@ -362,18 +408,7 @@ void http_start(int PORT, int debugmode){
         printf("%s\n", buffer);
 
         if(fork() == 0){
-            char* get = strtok(buffer, " ");
-            header.method = get;
-            get = strtok(NULL, " ");
-
-            if(strstr(get, "?") != NULL){
-                char* parameters = strtok(get, "?");
-                parameters = strtok(NULL, "?");
-                header.parameters = parameters;
-            }
-            header.route = get;
-            // child
-            http_route_handler();
+            http_parser(buffer);
             close(server_fd);
             exit(1);
         }
