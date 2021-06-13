@@ -304,7 +304,7 @@ void http_parser(char* buffer){
     header.content_type = content_type;
 
     // if content type is from form, set content has parameters
-    if(strcmp(header.content_type, "application/x-www-form-urlencoded") != NULL){
+    if(strcmp(header.content_type, "application/x-www-form-urlencoded") == 0){
         header.parameters = content;
     }
     header.content = content;

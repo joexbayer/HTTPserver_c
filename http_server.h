@@ -32,7 +32,6 @@ struct http_route
 
 void http_addfolder(char* folder);
 void http_addroute(char* method, char* path, void (*f)());
-void http_routehandler();
 void http_sendfile(char* file);
 void http_start(int port, int debugmode);
 char* http_getparameter(char* variable);
