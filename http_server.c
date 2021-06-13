@@ -161,11 +161,10 @@ void http_route_handler(){
     Returns: value of variable
 **************************************************************/
 char* http_getparameter(char* variable){
-
+    printf("%s\n", header.parameters);
     char* variable_name;
     char* parameter = malloc(strlen(header.parameters)+1);
     strcpy(parameter, header.parameters);
-
     if(strstr(header.parameters, "&") != NULL){
         char* parameter_tok = strtok(parameter, "&");
         while(parameter_tok != NULL && (strstr(parameter_tok, variable) == NULL)){
@@ -302,6 +301,7 @@ void http_parser(char* buffer){
     char* content_type = strtok(content_type_raw, " ");
     content_type = strtok(NULL, " ");
     header.content_type = content_type;
+    header.content_type[33] = 0;
 
     // if content type is from form, set content has parameters
     if(strcmp(header.content_type, "application/x-www-form-urlencoded") == 0){
@@ -401,13 +401,15 @@ void http_start(int PORT, int debugmode){
         if(debug)
             printf("%s", "[DEBUG] Incomming request for ");
 
-        //prepare buffer
-        char buffer[HTTP_BUFFER_SIZE] = {0};
-        valread = read(http_client, buffer, HTTP_BUFFER_SIZE);
-
-        printf("%s\n", buffer);
-
         if(fork() == 0){
+            //child ->
+
+            //prepare buffer
+            char buffer[HTTP_BUFFER_SIZE] = {0};
+            valread = read(http_client, buffer, HTTP_BUFFER_SIZE);
+
+            printf("%s\n", buffer);
+
             http_parser(buffer);
             close(server_fd);
             exit(1);

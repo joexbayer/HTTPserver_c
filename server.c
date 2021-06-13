@@ -9,8 +9,9 @@ void login(){
     char* username = http_getparameter("username");
     char* password = http_getparameter("password");
 
-    if(strcmp(username, "joe") == NULL && strcmp(password, "123") == NULL){
-        
+
+    if(strcmp(username, "joe") == 0 && strcmp(password, "123") == 0){
+
         http_sendfile("index.html");
     }
     http_404();
