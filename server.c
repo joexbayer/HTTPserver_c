@@ -7,6 +7,8 @@ void test(){
     printf("%s\n", name);
     printf("%s\n", age);
 
+
+
     http_sendfile("index.html");
 }
 

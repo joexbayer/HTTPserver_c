@@ -165,21 +165,22 @@ void http_route_handler(){
     Returns: value of variable
 **************************************************************/
 char* http_getparameter(char* variable){
+
     char* variable_name;
     char* parameter = malloc(strlen(header.parameters)+1);
     strcpy(parameter, header.parameters);
+
     if(strstr(header.parameters, "&") != NULL){
         char* parameter_tok = strtok(parameter, "&");
-        while(strstr(parameter_tok, variable) == NULL){
+        while(parameter_tok != NULL && (strstr(parameter_tok, variable) == NULL)){
             parameter_tok = strtok(NULL, "&");
         }
         variable_name = strtok(parameter_tok, "=");
     } else {
         variable_name = strtok(header.parameters, "=");
     }
-    if(strcmp(variable, variable_name) == 0){
+    if(variable_name != NULL && strcmp(variable, variable_name) == 0){
         char* variable_value = strtok(NULL, "=");
-
         free(parameter);
         return variable_value;
     }
