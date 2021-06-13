@@ -1,6 +1,12 @@
 #include "http_server.h"
 
 void test(){
+    char* age = http_getparameter("age");
+    char* name = http_getparameter("name");
+
+    printf("%s\n", name);
+    printf("%s\n", age);
+
     http_sendfile("index.html");
 }
 

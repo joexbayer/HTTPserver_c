@@ -33,5 +33,6 @@ void http_addroute(char* path, void (*f)(), char* method);
 void http_routehandler();
 void http_sendfile(char* file);
 void http_start(int port, int debugmode);
+char* http_getparameter(char* variable);
 
 #endif

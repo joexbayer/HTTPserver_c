@@ -2,7 +2,7 @@
 
 // todo: POST / GET, enable global indexing with addfoler("/"), ? delimiter as function paramters.
 
-/*
+/**************************************************************
     Hypertext Transfer Protocol (HTTP/1.1): Message Syntax and Routing
     https://datatracker.ietf.org/doc/html/rfc7230
 
@@ -28,21 +28,21 @@
     To add routes use http_addroute(char* route, void (*f)());
 
     Example: http_addroute("/dog", &dog);
-*/
+**************************************************************/
 int http_client = -1;
 struct http_route* http_routes[NUMBER_OF_ROUTES];
 int http_routecounter = 0;
 
 int server_fd;
 
-/*
+/**************************************************************
     http_folders contains names of folders that are able to be accessed throuhg indexing.
     If the folders name is inside the indexed path, the file is returned, if present.
 
     To add folders use http_addfolder(char* folder); 
 
     Example: http_addfolder("dogs");
-*/
+**************************************************************/
 char* http_folders[NUMBER_OF_FOLDERS];
 int http_foldercount = 0;
 
@@ -55,14 +55,14 @@ int debug = 0;
 struct http_header header;
 
 
-/*
+/**************************************************************
     Summery: 
 
     http_404 returns the 404 status code. It is called if a file or route is not found.
 
     PARAMS: NONE
     Returns: VOID
-*/
+**************************************************************/
 void http_404(){
     char *header = "HTTP/1.1 404 Not Found\nContent-Type: text/html\nContent-Length: 13\n\n 404 Not found";
     write(http_client, header, strlen(header)+2);
@@ -72,7 +72,7 @@ void http_404(){
 }
 
 
-/*
+/**************************************************************
     Summery: 
 
     Makes a route accessible and calls user defined function. 
@@ -80,7 +80,7 @@ void http_404(){
 
     PARAMS: name of route, function pointer.
     Returns: VOID
-*/
+**************************************************************/
 void http_addroute(char* path, void (*f)(), char* method){
 
     struct http_route* route = malloc(sizeof(struct http_route));
@@ -93,7 +93,7 @@ void http_addroute(char* path, void (*f)(), char* method){
 
 }
 
-/*
+/**************************************************************
     Summery: 
 
     Adds a folder name to a list of indexable folders.
@@ -101,14 +101,14 @@ void http_addroute(char* path, void (*f)(), char* method){
 
     PARAMS: name of folder
     Returns: VOID
-*/
+**************************************************************/
 void http_addfolder(char* folder){
     http_folders[http_foldercount] = folder;
     http_foldercount++;
 }
 
 
-/*
+/**************************************************************
     Summery: 
 
     Handles parsing of given route and returning files or run given functions.
@@ -124,8 +124,8 @@ void http_addfolder(char* folder){
 
     PARAMS: 
     Returns: VOID
-*/
-void http_routehandler(){
+**************************************************************/
+void http_route_handler(){
 
     if(strcmp(header.method, "POST") == 0){
         return;
@@ -156,6 +156,36 @@ void http_routehandler(){
     }
     http_404();
 }
+/**************************************************************
+    Summery: 
+
+    Parses parameters and returns the value of the selected variable from the request.
+
+    PARAMS: name of variable
+    Returns: value of variable
+**************************************************************/
+char* http_getparameter(char* variable){
+    char* variable_name;
+    char* parameter = malloc(strlen(header.parameters)+1);
+    strcpy(parameter, header.parameters);
+    if(strstr(header.parameters, "&") != NULL){
+        char* parameter_tok = strtok(parameter, "&");
+        while(strstr(parameter_tok, variable) == NULL){
+            parameter_tok = strtok(NULL, "&");
+        }
+        variable_name = strtok(parameter_tok, "=");
+    } else {
+        variable_name = strtok(header.parameters, "=");
+    }
+    if(strcmp(variable, variable_name) == 0){
+        char* variable_value = strtok(NULL, "=");
+
+        free(parameter);
+        return variable_value;
+    }
+    free(parameter);
+    return NULL;
+}
 
 
 void intHandler(){
@@ -169,7 +199,7 @@ void intHandler(){
     exit(0);
 }
 
-/*
+/**************************************************************
     Summery: 
 
     Will return file with given filename. First it checks if file exsists.
@@ -179,7 +209,7 @@ void intHandler(){
 
     PARAMS: name of file
     Returns: VOID
-*/
+**************************************************************/
 void http_sendfile(char* file){
 
     if(access(file, F_OK)) {
@@ -235,7 +265,7 @@ void http_sendfile(char* file){
     close(http_client);
 }
 
-/*
+/**************************************************************
     Summery: 
 
     Creates tcp socket with given port and will set global variables.
@@ -244,7 +274,7 @@ void http_sendfile(char* file){
 
     PARAMS: PORT,  set debugmode
     Returns: VOID
-*/
+**************************************************************/
 void http_start(int PORT, int debugmode){
     printf("%s\n", "[STARTUP] Starting HTTP server on port 8080.");
     debug = debugmode;
@@ -330,21 +360,19 @@ void http_start(int PORT, int debugmode){
 
         printf("%s\n", buffer);
 
-        char* get = strtok(buffer, " ");
-        header.method = get;
-        get = strtok(NULL, " ");
-
-        if(strstr(get, "?") != NULL){
-            char* paramters = strtok(get, "?");
-            paramters = strtok(NULL, "?");
-            header.parameters = paramters;
-            printf("%s\n", header.parameters);
-        }
-        header.route = get;
-
         if(fork() == 0){
+            char* get = strtok(buffer, " ");
+            header.method = get;
+            get = strtok(NULL, " ");
+
+            if(strstr(get, "?") != NULL){
+                char* parameters = strtok(get, "?");
+                parameters = strtok(NULL, "?");
+                header.parameters = parameters;
+            }
+            header.route = get;
             // child
-            http_routehandler();
+            http_route_handler();
             close(server_fd);
             exit(1);
         }
