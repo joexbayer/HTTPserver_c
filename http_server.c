@@ -1,6 +1,11 @@
 #include "http_server.h"
 
-// todo: POST / GET, enable global indexing with addfoler("/"), ? delimiter as function paramters.
+/*
+    TODO: 
+    POST / GET, enable global indexing with addfoler("/"), ? delimiter as function paramters.
+    Response header
+    Cookies
+*/
 
 /**************************************************************
     Hypertext Transfer Protocol (HTTP/1.1): Message Syntax and Routing
@@ -53,6 +58,8 @@ int debug = 0;
 
 
 struct http_header header;
+
+char* http_response_header = "Content-Type: text/html\nContent-Security-Policy: script-src 'unsafe-inline';";
 
 
 /**************************************************************
@@ -112,15 +119,10 @@ void http_addfolder(char* folder){
     Summery: 
 
     Handles parsing of given route and returning files or run given functions.
-    If alle files are indexable it tries to send indexed file.
-    If files are not indexable it will go through all routes and check if it has been added.
-    Then run according function. At last it will go through all folders and see if route
-    includes the folder name.
+    Routes are always prioritized before folder indexing.
+    If no routes have been found, the server will check for folders
 
     If none of the above occur 404 will be returned.
-
-
-
 
     PARAMS: 
     Returns: VOID
@@ -146,7 +148,7 @@ void http_route_handler(){
             strcat(file, header.route);
             file[strlen(header.route)+2] = 0;
 
-            http_sendfile(file);
+            http_sendhtml(file);
             return;
         }
     }
@@ -161,7 +163,6 @@ void http_route_handler(){
     Returns: value of variable
 **************************************************************/
 char* http_getparameter(char* variable){
-    printf("%s\n", header.parameters);
     char* variable_name;
     char* parameter = malloc(strlen(header.parameters)+1);
     strcpy(parameter, header.parameters);
@@ -191,7 +192,7 @@ void intHandler(){
         free(http_routes[http_routecounter]);
     }
     close(server_fd);
-    printf("%s\n", "[SHUTDOWN] Goodbye.");
+    printf("%s %ld.\n", "[SHUTDOWN] Goodbye ", (long)getpid());
     exit(0);
 }
 
@@ -206,7 +207,7 @@ void intHandler(){
     PARAMS: name of file
     Returns: VOID
 **************************************************************/
-void http_sendfile(char* file){
+void http_sendhtml(char* file){
 
     if(access(file, F_OK)) {
         http_404();
@@ -243,19 +244,26 @@ void http_sendfile(char* file){
         exit(EXIT_FAILURE);
     }
 
-    // allocate response buffer
-    char buff[content_size+100];
+    // allocate response buffer for content and reponse header
+    char buff[content_size+100+strlen(http_response_header)];
 
     //server response header HTTP format
-    char *header = "HTTP/1.1 200 OK\nContent-Type: text/html\nContent-Length: ";
+    char *header = "HTTP/1.1 200 OK\n";
 
     // add content length and content
     strcpy(buff, header);
+    // add custom http_response_header
+    strcat(buff, http_response_header);
+    strcat(buff, "\n");
+
+    strcat(buff, "Content-Length: ");
     strcat(buff, filesizestr);
     strcat(buff, "\n\n");
-    strcat(buff, content);
 
-    write(http_client, buff, content_size+100);
+    // add content
+    strcat(buff, content); // use memcpy instead
+
+    write(http_client, buff, strlen(buff));
     if(debug)
         printf("%s\n", "[DEBUG] File has been sent.");
     close(http_client);
@@ -265,12 +273,22 @@ void http_sendfile(char* file){
     Summery: 
 
     Parses the given http request, and fills http_header.
+
+    2.1.  Client/Server Messaging /rfc7230
+    A client sends an HTTP request to a server in the form of a request
+    message, beginning with a request-line that includes a method, URI,
+    and protocol version (Section 3.1.1), followed by header fields
+    containing request modifiers, client information, and representation
+    metadata (Section 3.2), an empty line to indicate the end of the
+    header section, and finally a message body containing the payload
+    body (if any, Section 3.3).
     
     PARAMS: request buffer
     Returns: VOID
 **************************************************************/
 void http_parser(char* buffer){
     // get method
+
     char* get = strtok(buffer, " ");
     header.method = get;
     get = strtok(NULL, " ");
@@ -285,7 +303,7 @@ void http_parser(char* buffer){
 
     // check all lines
     char* line = strtok(NULL, "\n");
-    char* content_type_raw;
+    char* content_type_raw = NULL;
     char* content;
     while(line != NULL){
 
@@ -298,18 +316,18 @@ void http_parser(char* buffer){
     }
 
     // get http content type
-    char* content_type = strtok(content_type_raw, " ");
-    content_type = strtok(NULL, " ");
-    header.content_type = content_type;
-    header.content_type[33] = 0;
+    if(content_type_raw != NULL){
+        char* content_type = strtok(content_type_raw, " ");
+        content_type = strtok(NULL, " ");
+        header.content_type = content_type;
 
-    // if content type is from form, set content has parameters
-    if(strcmp(header.content_type, "application/x-www-form-urlencoded") == 0){
-        header.parameters = content;
+            // if content type is from form, set content has parameters
+        if(strstr(header.content_type, "application/x-www-form-urlencoded") != NULL){
+            header.parameters = content;
+        }
+
+        header.content = content;
     }
-    header.content = content;
-
-    http_route_handler();
 }
 
 /**************************************************************
@@ -318,12 +336,22 @@ void http_parser(char* buffer){
     Creates tcp socket with given port and will set global variables.
     After tcp socket is created it will accept clients then create a new chil process to handle request.
     While parent process keeps accepting new clients.
+    
+    2.1.  Client/Server Messaging - rfc7230
+    An HTTP "server" is a program
+    that accepts connections in order to service HTTP requests by sending
+    HTTP responses.
+
+        request   >
+   UA ======================================= O
+                               <   response
+
 
     PARAMS: PORT,  set debugmode
     Returns: VOID
 **************************************************************/
 void http_start(int PORT, int debugmode){
-    printf("%s\n", "[STARTUP] Starting HTTP server on port 8080.");
+    printf("%s %d\n", "[STARTUP] Starting HTTP server on port", PORT);
     debug = debugmode;
 
     if(debug)
@@ -368,7 +396,7 @@ void http_start(int PORT, int debugmode){
         exit(1);
 
     //bind server socket to sockaddr
-    if (bind(server_fd, (struct sockaddr *)&address, sizeof(address)) < 0)
+    if (bind(server_fd, (struct sockaddr *)&address, sizeof(struct sockaddr_in)) < 0)
     {
         //error handling
         perror("Bind");
@@ -392,25 +420,35 @@ void http_start(int PORT, int debugmode){
     {
         //accpet new socket connection
         //int accept(int sockfd, struct sockaddr *addr, socklen_t *addrlen);
-        if ((http_client = accept(server_fd, (struct sockaddr *)&addrlen, (socklen_t*)&addrlen)) < 0)
+        if ((http_client = accept(server_fd, (struct sockaddr *)&address, (socklen_t*)&addrlen)) < 0)
         {
             //error handling
             perror("accept");
             exit(EXIT_FAILURE);
         }
         if(debug)
-            printf("%s", "[DEBUG] Incomming request for ");
+            printf("%s", "[DEBUG] Incomming request for \n");
 
         if(fork() == 0){
             //child ->
 
-            //prepare buffer
+            //prepare buffer and read from client
             char buffer[HTTP_BUFFER_SIZE] = {0};
             valread = read(http_client, buffer, HTTP_BUFFER_SIZE);
+            if(valread == 0){
+                printf("%s\n", "[DEBUG] Empty request ");
+            }
 
             printf("%s\n", buffer);
 
             http_parser(buffer);
+            http_route_handler();
+
+
+            for (int i = 0; i < http_routecounter; ++i)
+            {
+                free(http_routes[http_routecounter]);
+            }
             close(server_fd);
             exit(1);
         }

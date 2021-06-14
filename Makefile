@@ -1,5 +1,5 @@
 VFLAGS = --track-origins=yes --leak-check=full --show-leak-kinds=all
-CFLAGS = -std=gnu11 -g -Wall -Wextra
+CFLAGS = -std=gnu11 -g -Wall -Wextra -lm
 
 all: server
 

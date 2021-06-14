@@ -2,7 +2,7 @@
 
 void home(){
 
-    http_sendfile("index.html");
+    http_sendhtml("index.html");
 }
 
 void login(){
@@ -12,7 +12,7 @@ void login(){
 
     if(strcmp(username, "joe") == 0 && strcmp(password, "123") == 0){
 
-        http_sendfile("index.html");
+        http_sendhtml("index.html");
     }
     http_404();
 }
@@ -27,7 +27,7 @@ int main()
     http_addfolder("/");
 
     // http_start(PORT, DEBUG)
-    http_start(8080, 1);
+    http_start(8081, 1);
 
     return 0;
 }

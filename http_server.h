@@ -9,6 +9,7 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <math.h>
+#include <signal.h>
 
 #define NUMBER_OF_ROUTES 50
 #define NUMBER_OF_FOLDERS 50
@@ -32,7 +33,7 @@ struct http_route
 
 void http_addfolder(char* folder);
 void http_addroute(char* method, char* path, void (*f)());
-void http_sendfile(char* file);
+void http_sendhtml(char* file);
 void http_start(int port, int debugmode);
 char* http_getparameter(char* variable);
 void http_404();
