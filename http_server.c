@@ -5,9 +5,9 @@
     POST / GET, enable global indexing with addfoler("/"), ? delimiter as function paramters.
     Response header
     Cookies
-*/
 
-/**************************************************************
+    Standards and Syntax:
+
     Hypertext Transfer Protocol (HTTP/1.1): Message Syntax and Routing
     https://datatracker.ietf.org/doc/html/rfc7230
 
@@ -26,10 +26,10 @@
     Hypertext Transfer Protocol (HTTP/1.1): Authentication
     https://datatracker.ietf.org/doc/html/rfc7235
 
-    http_routes is a list of added routes, it is mirrored with http_routefunctions which
-    is a array that counts a pointer to function that is called when a route is accessed.
-    http_routecounter is a counter for how many routes has been added.
+*/
 
+/*************************************************************
+    http_routes is a list of added routes.
     To add routes use http_addroute(char* route, void (*f)());
 
     Example: http_addroute("/dog", &dog);
@@ -38,7 +38,10 @@ int http_client = -1;
 struct http_route* http_routes[NUMBER_OF_ROUTES];
 int http_routecounter = 0;
 
-int server_fd;
+
+int http_server_fd;
+
+int http_request_counter = 0;
 
 /**************************************************************
     http_folders contains names of folders that are able to be accessed throuhg indexing.
@@ -51,15 +54,19 @@ int server_fd;
 char* http_folders[NUMBER_OF_FOLDERS];
 int http_foldercount = 0;
 
-/*
-    Global variables to enable debug mode or allow indexing.
-*/
-int debug = 0;
+// custom headers to be added after server start.
+char* http_custom_headers[10];
+int http_total_custom_header = 0;
 
+int debug = 0; // Global variable to enable debug mode.
 
-struct http_header header;
+struct http_header header;// request header, will be filled by http_parser
 
-char* http_response_header = "Content-Type: text/html\nContent-Security-Policy: script-src 'unsafe-inline';";
+char* http_default_header = "Server: UniqueHttpd (Unix)\n";
+
+char* http_response_header;
+
+//
 
 
 /**************************************************************
@@ -67,8 +74,8 @@ char* http_response_header = "Content-Type: text/html\nContent-Security-Policy: 
 
     http_404 returns the 404 status code. It is called if a file or route is not found.
 
-    PARAMS: NONE
-    Returns: VOID
+    @PARAMS: NONE
+    @returns: VOID
 **************************************************************/
 void http_404(){
     char *header = "HTTP/1.1 404 Not Found\nContent-Type: text/html\nContent-Length: 13\n\n 404 Not found";
@@ -78,6 +85,87 @@ void http_404(){
     close(http_client);
 }
 
+/**************************************************************
+    Loops through all routes and frees the allocted memory
+**************************************************************/
+void http_free_routes(){
+
+    for (int i = 0; i < http_routecounter; ++i)
+    {
+        free(http_routes[http_routecounter]);
+    }
+    free(http_response_header);
+
+}
+
+/**************************************************************
+    Summery: 
+
+    Adds given header to http_response_header!
+
+    !header MUST not include newline (\n)
+
+    @PARAMS: header to be added.
+    @returns: length of header.
+**************************************************************/
+int http_add_responseheader(char* header){
+
+    // if server has not been started, add to waitlist
+    if(http_response_header == NULL){
+        if(http_total_custom_header == 10){
+            return -1;
+        }
+
+        http_custom_headers[http_total_custom_header] = header;
+        http_total_custom_header++;
+        
+        return strlen(header);
+    }
+
+    // normal procedure
+    int total_length = strlen(http_response_header)+strlen(header)+2;
+
+    char* result = malloc(total_length);
+
+    strcpy(result, http_response_header);
+    strcat(result, header);
+    strcat(result, "\n");
+    result[total_length] = 0;
+    free(http_response_header);
+    http_response_header = result;
+    return strlen(header);
+}
+
+/**************************************************************
+    Summery: 
+
+    Abstraction to add content type header.
+
+    @PARAMS: content type value
+    @returns: length of header.
+**************************************************************/
+int http_add_content_type(char* content_type_value){
+
+
+    char* content_type = "Content-Type: ";
+
+    int total_length = strlen(content_type)+strlen(content_type_value)+2;
+
+    char* result = malloc(total_length);
+
+    strcpy(result, content_type);
+    strcat(result, content_type_value);
+    result[total_length] = 0;
+
+    http_add_responseheader(result);
+
+    free(result);
+
+    return strlen(content_type_value);
+}
+
+
+
 
 /**************************************************************
     Summery: 
@@ -85,10 +173,14 @@ void http_404(){
     Makes a route accessible and calls user defined function. 
     The user defined functions must have return type of void, and have no parameters.
 
-    PARAMS: name of route, function pointer.
-    Returns: VOID
+    @PARAMS: name of route, function pointer.
+    @returns: number of total routes, -1 on error
 **************************************************************/
-void http_addroute(char* method, char* path, void (*f)()){
+int http_addroute(char* method, char* path, void (*f)()){
+
+    if(http_routecounter == NUMBER_OF_ROUTES){
+        return -1;
+    }
 
     struct http_route* route = malloc(sizeof(struct http_route));
     route->method = method;
@@ -98,20 +190,30 @@ void http_addroute(char* method, char* path, void (*f)()){
     http_routes[http_routecounter] = route;
     http_routecounter++;
 
+    return http_routecounter;
+
 }
 
 /**************************************************************
     Summery: 
 
     Adds a folder name to a list of indexable folders.
-    If folder name is included in the route, all files inside the folder will be indexable.
+    If folder name is included in the route, all files inside 
+    the folder will be indexable.
 
-    PARAMS: name of folder
-    Returns: VOID
+    @PARAMS: name of folder
+    @returns: number of folder, -1 on error.
 **************************************************************/
-void http_addfolder(char* folder){
+int http_addfolder(char* folder){
+
+    if(http_foldercount == NUMBER_OF_FOLDERS){
+        return -1;
+    }
+
     http_folders[http_foldercount] = folder;
     http_foldercount++;
+
+    return http_foldercount;
 }
 
 
@@ -124,8 +226,8 @@ void http_addfolder(char* folder){
 
     If none of the above occur 404 will be returned.
 
-    PARAMS: 
-    Returns: VOID
+    @PARAMS: void
+    @returns: void
 **************************************************************/
 void http_route_handler(){
 
@@ -157,23 +259,38 @@ void http_route_handler(){
 /**************************************************************
     Summery: 
 
-    Parses parameters and returns the value of the selected variable from the request.
+    Parses query / fragment parameters and returns the value of
+    the selected variable from the request.
+    
+    Modes:
+        0 = query
+        1 = fragment
 
-    PARAMS: name of variable
-    Returns: value of variable
+    @PARAMS: name of variable, int as selected mode
+    @returns: value of variable, NULL on error.
 **************************************************************/
-char* http_getparameter(char* variable){
+char* http_get_parameter(char* variable, int mode){
+
+    char* parameter;
     char* variable_name;
-    char* parameter = malloc(strlen(header.parameters)+1);
-    strcpy(parameter, header.parameters);
-    if(strstr(header.parameters, "&") != NULL){
-        char* parameter_tok = strtok(parameter, "&");
+
+    if(!mode){
+        parameter = malloc(strlen(header.query)+1);
+        strcpy(parameter, header.query);
+    } else {
+        parameter = malloc(strlen(header.fragment)+1);
+        strcpy(parameter, header.fragment);
+    }
+    char* delimiter = "&";
+
+    if(strstr(parameter, delimiter) != NULL){
+        char* parameter_tok = strtok(parameter, delimiter);
         while(parameter_tok != NULL && (strstr(parameter_tok, variable) == NULL)){
-            parameter_tok = strtok(NULL, "&");
+            parameter_tok = strtok(NULL, delimiter);
         }
         variable_name = strtok(parameter_tok, "=");
     } else {
-        variable_name = strtok(header.parameters, "=");
+        variable_name = strtok(header.query, "=");
     }
     if(variable_name != NULL && strcmp(variable, variable_name) == 0){
         char* variable_value = strtok(NULL, "=");
@@ -184,28 +301,27 @@ char* http_getparameter(char* variable){
     return NULL;
 }
 
-
+/**************************************************************
+    Interrupt handler on CTRL-C
+**************************************************************/
 void intHandler(){
     printf("\n%s\n", "[SHUTDOWN] Server is shutting down...");
-    for (int i = 0; i < http_routecounter; ++i)
-    {
-        free(http_routes[http_routecounter]);
-    }
-    close(server_fd);
-    printf("%s %ld.\n", "[SHUTDOWN] Goodbye ", (long)getpid());
+    http_free_routes();
+    close(http_server_fd);
+    printf("%s %ld!.\n", "[SHUTDOWN] Goodbye ", (long)getpid());
     exit(0);
 }
 
 /**************************************************************
     Summery: 
 
-    Will return file with given filename. First it checks if file exsists.
+    Will return file with given filename. First it checks if file exists.
     If not 404 will be returned. If it does exist the file will be loaded into
-    memory then added to the repose header and send to client.
+    memory then added to the response header and send to client.
 
 
-    PARAMS: name of file
-    Returns: VOID
+    @PARAMS: name of file
+    @returns: void
 **************************************************************/
 void http_sendhtml(char* file){
 
@@ -217,6 +333,7 @@ void http_sendhtml(char* file){
     FILE *fp = fopen(file, "rb");
     if ( NULL == fp ) {
         perror("FILE");
+        http_free_routes();
         exit(EXIT_FAILURE);
     }
     int fd = fileno(fp);
@@ -250,18 +367,60 @@ void http_sendhtml(char* file){
     //server response header HTTP format
     char *header = "HTTP/1.1 200 OK\n";
 
+    http_add_content_type("text/html");
     // add content length and content
     strcpy(buff, header);
     // add custom http_response_header
     strcat(buff, http_response_header);
-    strcat(buff, "\n");
-
+    // add content length header
     strcat(buff, "Content-Length: ");
     strcat(buff, filesizestr);
     strcat(buff, "\n\n");
 
     // add content
     strcat(buff, content); // use memcpy instead
+
+    write(http_client, buff, strlen(buff));
+    if(debug)
+        printf("%s\n", "[DEBUG] File has been sent.");
+    close(http_client);
+}
+
+
+/**************************************************************
+    Summery: 
+
+    Will send given text.
+
+    @PARAMS: char* text to send
+    @returns: void
+**************************************************************/
+void http_sendtext(char* text){
+    char buff[strlen(text)+100+strlen(http_response_header)];
+
+    //server response header HTTP format
+    char *header = "HTTP/1.1 200 OK\n";
+
+    http_add_content_type("text/plain");
+    // add content length and content
+    strcpy(buff, header);
+    // add custom http_response_header
+    strcat(buff, http_response_header);
+    // add content length header
+    strcat(buff, "Content-Length: ");
+
+
+    int text_size = strlen(text);
+
+    // int to string hack
+    char size[(int)((ceil(log10(text_size))+1)*sizeof(char))];
+    sprintf(size, "%d", text_size);
+
+    strcat(buff, size);
+    strcat(buff, "\n\n");
+
+    // add content
+    strcat(buff, text); // use memcpy instead
 
     write(http_client, buff, strlen(buff));
     if(debug)
@@ -282,9 +441,11 @@ void http_sendhtml(char* file){
     metadata (Section 3.2), an empty line to indicate the end of the
     header section, and finally a message body containing the payload
     body (if any, Section 3.3).
+
+    http-URI = "http:" "//" authority path-abempty [ "?" query ] [ "#" fragment ]
     
-    PARAMS: request buffer
-    Returns: VOID
+    @PARAMS: request buffer
+    @returns: VOID
 **************************************************************/
 void http_parser(char* buffer){
     // get method
@@ -293,13 +454,23 @@ void http_parser(char* buffer){
     header.method = get;
     get = strtok(NULL, " ");
 
-    // check for url parameters
+
+    // check for uri query
     if(strstr(get, "?") != NULL){
-        char* parameters = strtok(get, "?");
-        parameters = strtok(NULL, "?");
-        header.parameters = parameters;
+        char* query = strtok(get, "?");
+        query = strtok(NULL, "?");
+        header.query = query;
     }
+
+    // check for uri fragment
+    if(strstr(get, "#") != NULL){
+        char* fragment = strtok(get, "#");
+        fragment = strtok(NULL, "#");
+        header.fragment = fragment;
+    }
+
     header.route = get;
+    printf("%s\n", header.route);
 
     // check all lines
     char* line = strtok(NULL, "\n");
@@ -323,7 +494,7 @@ void http_parser(char* buffer){
 
             // if content type is from form, set content has parameters
         if(strstr(header.content_type, "application/x-www-form-urlencoded") != NULL){
-            header.parameters = content;
+            header.query = content;
         }
 
         header.content = content;
@@ -343,12 +514,12 @@ void http_parser(char* buffer){
     HTTP responses.
 
         request   >
-   UA ======================================= O
+    UA ======================================= O
                                <   response
 
 
-    PARAMS: PORT,  set debugmode
-    Returns: VOID
+    @PARAMS: PORT,  set debugmode
+    @returns: VOID
 **************************************************************/
 void http_start(int PORT, int debugmode){
     printf("%s %d\n", "[STARTUP] Starting HTTP server on port", PORT);
@@ -370,7 +541,7 @@ void http_start(int PORT, int debugmode){
     AF_INET = IP address family
     SOCK_STREAM = virtual circuit service.
     */
-    if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0)
+    if ((http_server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0)
     {
         //error handling
         perror("FD socket");
@@ -392,11 +563,11 @@ void http_start(int PORT, int debugmode){
 
     memset(address.sin_zero, '\0', sizeof(address.sin_zero));
 
-    if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &(int){1}, sizeof(int)) < 0)
+    if (setsockopt(http_server_fd, SOL_SOCKET, SO_REUSEADDR, &(int){1}, sizeof(int)) < 0)
         exit(1);
 
     //bind server socket to sockaddr
-    if (bind(server_fd, (struct sockaddr *)&address, sizeof(struct sockaddr_in)) < 0)
+    if (bind(http_server_fd, (struct sockaddr *)&address, sizeof(struct sockaddr_in)) < 0)
     {
         //error handling
         perror("Bind");
@@ -404,7 +575,7 @@ void http_start(int PORT, int debugmode){
     }
 
     //set socket to listen
-    if (listen(server_fd, 10) < 0)
+    if (listen(http_server_fd, 10) < 0)
     {
         //error handling
         perror("listen");
@@ -415,12 +586,26 @@ void http_start(int PORT, int debugmode){
 
     signal(SIGINT, intHandler);
 
+    // setup for response header;
+    http_response_header = malloc(strlen(http_default_header)+1);
+    strcpy(http_response_header, http_default_header);
+    http_response_header[strlen(http_default_header)+1] = 0;
+
+    // check for headers in waitlist
+    if(http_total_custom_header > 0){
+        for (int i = 0; i < http_total_custom_header; ++i)
+        {
+            // add headers in waitlist
+            http_add_responseheader(http_custom_headers[i]);
+        }
+    }
+
     //listen loop
     while(1)
     {
         //accpet new socket connection
         //int accept(int sockfd, struct sockaddr *addr, socklen_t *addrlen);
-        if ((http_client = accept(server_fd, (struct sockaddr *)&address, (socklen_t*)&addrlen)) < 0)
+        if ((http_client = accept(http_server_fd, (struct sockaddr *)&address, (socklen_t*)&addrlen)) < 0)
         {
             //error handling
             perror("accept");
@@ -428,6 +613,8 @@ void http_start(int PORT, int debugmode){
         }
         if(debug)
             printf("%s", "[DEBUG] Incomming request for \n");
+
+        http_request_counter++;
 
         if(fork() == 0){
             //child ->
@@ -444,12 +631,8 @@ void http_start(int PORT, int debugmode){
             http_parser(buffer);
             http_route_handler();
 
-
-            for (int i = 0; i < http_routecounter; ++i)
-            {
-                free(http_routes[http_routecounter]);
-            }
-            close(server_fd);
+            http_free_routes();
+            close(http_server_fd);
             exit(1);
         }
 

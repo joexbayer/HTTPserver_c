@@ -1,16 +1,73 @@
 <!DOCTYPE html>
 <html>
+<head>
+	<link rel="preconnect" href="https://fonts.gstatic.com">
+	<link href="https://fonts.googleapis.com/css2?family=Playfair+Display+SC&display=swap" rel="stylesheet">
+</head>
+
+<style type="text/css">
+	input, button, body {
+    	text-align: center;
+	}
+	li {
+		padding-bottom: 1%;
+		margin: 0;
+	}	
+</style>
+
 <body style="text-align: center;">
 
-<h1> HTTP server is working! </h1>
+	<div style="width: 70%;margin: auto;border: solid 1 black;">
 
-<p> Proudly working since 12. Jun 2021 - 19:24 </p>
+		<h1> HTTP server is running! </h1>
 
-<form method="POST" action="/login">
-	<input type="text" name="username">
-	<input type="password" name="password">
-	<input type="submit" name="">
-</form>
+		<p> Proudly working since 12. Jun 2021 - 19:24 </p>
+
+		<div style="content: '';display: table;clear: both;width: auto;margin: auto;">
+			<ul>
+				<li style="list-style-type: none;padding-right: 20px;float: left;">
+					<a href="/">[HOME]</a>
+				</li>
+				<li style="list-style-type: none;padding-right: 20px;float: left;">
+					<a href="/">[INFO]</a>
+				</li>
+				<li style="list-style-type: none;padding-right: 20px;float: left;">
+					<a href="/">[APP]</a>
+				</li>
+			</ul>
+		</div>
+
+		<div>
+			<p style="float: left;">(X)</p>
+			<p style="float:right;">[PAGE 1]</p>
+		</div>
+
+
+		<div style="content: '';display: table;clear: both;width: 100%;">
+			<div style="width:50%;float: left;">
+			<ul style="text-align: left">
+				<li><a href="https://datatracker.ietf.org/doc/html/rfc7230">RFC 7230 - (HTTP/1.1): Message Syntax and Routing</a></li>
+				<li><a href="https://datatracker.ietf.org/doc/html/rfc7231">RFC 7231 - (HTTP/1.1): Semantics and Content</a></li>
+				<li><a href="https://datatracker.ietf.org/doc/html/rfc7232">RFC 7232 - (HTTP/1.1): Conditional Requests</a></li>
+				<li><a href="https://datatracker.ietf.org/doc/html/rfc7233">RFC 7233 - (HTTP/1.1): Range Requests</a></li>
+				<li><a href="https://datatracker.ietf.org/doc/html/rfc7234">RFC 7234 - (HTTP/1.1): Caching</a></li>
+				<li><a href="https://datatracker.ietf.org/doc/html/rfc7235">RFC 7235 - (HTTP/1.1): Authentication</a></li>
+			</ul>
+			</div>
+		</div>
+				<form method="POST" action="/login">
+					<input placeholder="Username" type="text" name="username">
+					<input placeholder="Password" type="password" name="password">
+					<button>Log in</button>
+				</form>
+		
+
+		<div style="width: 50%;margin: auto;text-align: left;">
+			<p>HTTP server created on TCP sockets, implementing functionality according to RFC 7230, RFC 7231, RFC 7232, RFC 7233, RFC 7234 and RFC 7235.</p>
+
+			<p>Both handling POST and GET requests with parameters in GET query / fragment or part of POST content.</p>
+		</div>
+	</div>
 
 </body>
 </html>	

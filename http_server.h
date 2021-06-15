@@ -19,9 +19,10 @@ struct http_header
 {
 	char* method;
 	char* route;
-	char* parameters;
+	char* query;
 	char* content_type;
 	char* content;
+	char* fragment;
 };
 
 struct http_route
@@ -31,11 +32,13 @@ struct http_route
 	void (*http_routefunction)();
 };
 
-void http_addfolder(char* folder);
-void http_addroute(char* method, char* path, void (*f)());
+int http_addfolder(char* folder);
+int http_add_responseheader(char* header);
+int http_addroute(char* method, char* path, void (*f)());
 void http_sendhtml(char* file);
+void http_sendtext(char* text);
 void http_start(int port, int debugmode);
-char* http_getparameter(char* variable);
+char* http_get_parameter(char* variable, int mode);
 void http_404();
 
 #endif
