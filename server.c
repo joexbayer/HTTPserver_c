@@ -7,7 +7,7 @@ void home(){
 
 void text(){
 
-    http_sendtext("text");
+    http_sendtext("text\ntext");
 }
 
 // login example

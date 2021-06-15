@@ -5,6 +5,7 @@
     POST / GET, enable global indexing with addfoler("/"), ? delimiter as function paramters.
     Response header
     Cookies
+    Handle, multipart/form-data with boundry
 
     Standards and Syntax:
 
@@ -447,7 +448,7 @@ void http_sendtext(char* text){
     @PARAMS: request buffer
     @returns: VOID
 **************************************************************/
-void http_parser(char* buffer){
+void http_parser(char* buffer, char* content){
     // get method
 
     char* get = strtok(buffer, " ");
@@ -475,15 +476,18 @@ void http_parser(char* buffer){
     // check all lines
     char* line = strtok(NULL, "\n");
     char* content_type_raw = NULL;
-    char* content;
     while(line != NULL){
 
+        // break on end of header
+        if(strcmp(line, " ") < 0){
+            break;
+        }
         // content type
         if(strstr(line, "Content-Type") != NULL){
             content_type_raw = line;
         }
-        content = line;
         line = strtok(NULL, "\n");
+
     }
 
     // get http content type
@@ -619,6 +623,9 @@ void http_start(int PORT, int debugmode){
         if(fork() == 0){
             //child ->
 
+
+            const char *delim = "\r\n\r\n";
+    
             //prepare buffer and read from client
             char buffer[HTTP_BUFFER_SIZE] = {0};
             valread = read(http_client, buffer, HTTP_BUFFER_SIZE);
@@ -628,7 +635,9 @@ void http_start(int PORT, int debugmode){
 
             printf("%s\n", buffer);
 
-            http_parser(buffer);
+            char* header = strstr(buffer, delim);
+
+            http_parser(buffer, header+strlen(delim));
             http_route_handler();
 
             http_free_routes();
