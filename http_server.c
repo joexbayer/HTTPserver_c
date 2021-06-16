@@ -6,6 +6,11 @@
     Response header
     Cookies
     Handle, multipart/form-data with boundry
+    Get _request_header function
+    Handle absolute form:
+        An example absolute-form of request-line would be:
+
+        GET http://www.example.org/pub/WWW/TheProject.html HTTP/1.1
 
     Standards and Syntax:
 
@@ -41,6 +46,8 @@ int http_routecounter = 0;
 
 
 int http_server_fd;
+
+struct sockaddr_in address, client_addr;
 
 int http_request_counter = 0;
 
@@ -80,10 +87,30 @@ char* http_response_header;
 **************************************************************/
 void http_404(){
     char *header = "HTTP/1.1 404 Not Found\nContent-Type: text/html\nContent-Length: 13\n\n 404 Not found";
-    write(http_client, header, strlen(header)+2);
+    int w = write(http_client, header, strlen(header)+2);
+    if(w == 0){
+         printf(KRED "%s\n" KWHT, "[ERROR] 404 Response could not be sent!");
+    }
     if(debug)
         printf("%s\n", "[DEBUG] 404 Response has been sent.");
-    close(http_client);
+}
+
+/**************************************************************
+    Summery: 
+
+    http_400 returns the 400 bad request. It is called when headers are incorrect.
+
+    @PARAMS: NONE
+    @returns: VOID
+**************************************************************/
+void http_400(){
+    char *header = "HTTP/1.1 400 Bad Request \nContent-Type: text/html\nContent-Length: 15\n\n 400 Bad Request";
+    int w = write(http_client, header, strlen(header)+2);
+    if(w == 0){
+         printf(KRED "%s\n" KWHT, "[ERROR] 400 Response could not be sent!");
+    }
+    if(debug)
+        printf("%s\n", "[DEBUG] 400 Response has been sent.");
 }
 
 /**************************************************************
@@ -96,7 +123,16 @@ void http_free_routes(){
         free(http_routes[http_routecounter]);
     }
     free(http_response_header);
+}
 
+
+/**************************************************************
+    Loops through all routes and frees the allocted memory
+**************************************************************/
+void http_setup_header(){
+    http_response_header = malloc(strlen(http_default_header)+1);
+    strcpy(http_response_header, http_default_header);
+    http_response_header[strlen(http_default_header)+1] = 0;
 }
 
 /**************************************************************
@@ -302,14 +338,47 @@ char* http_get_parameter(char* variable, int mode){
     return NULL;
 }
 
+
+/**************************************************************
+    Summery: 
+
+    Searches request headers for given header name and returns
+    the value if found.
+
+    @PARAMS: name of header
+    @returns: value of header, NULL on error.
+**************************************************************/
+char* http_get_request_header(char* header_name){
+
+    char* current_header;
+
+    for (int i = 0; i < header.total_headers; ++i)
+    {
+
+        current_header = malloc(strlen(header.headers[i]));
+        strcpy(current_header, header.headers[i]);
+        char* current_header_name = strtok(current_header, " ");
+
+        if(current_header != NULL && strcmp(header_name, current_header_name) == 0){
+            char* header_value = strtok(NULL, " ");
+            free(current_header);
+            return header_value;
+        }
+
+        free(current_header);
+    }
+
+    return NULL;
+}
+
 /**************************************************************
     Interrupt handler on CTRL-C
 **************************************************************/
 void intHandler(){
-    printf("\n%s\n", "[SHUTDOWN] Server is shutting down...");
+    printf("%s\n", "[CLOSING] Closing connection...");
     http_free_routes();
     close(http_server_fd);
-    printf("%s %ld!.\n", "[SHUTDOWN] Goodbye ", (long)getpid());
+    printf(KRED "%s PID: %ld, PORT: %d!.\n" KWHT, "[CLOSING] Goodbye ", (long)getpid(), client_addr.sin_port);
     exit(0);
 }
 
@@ -324,13 +393,14 @@ void intHandler(){
     @PARAMS: name of file
     @returns: void
 **************************************************************/
-void http_sendhtml(char* file){
+void http_sendfile(char* file){
 
     if(access(file, F_OK)) {
         http_404();
         return;
     }
      // open reponse file
+    printf("%s\n", file);
     FILE *fp = fopen(file, "rb");
     if ( NULL == fp ) {
         perror("FILE");
@@ -367,8 +437,6 @@ void http_sendhtml(char* file){
 
     //server response header HTTP format
     char *header = "HTTP/1.1 200 OK\n";
-
-    http_add_content_type("text/html");
     // add content length and content
     strcpy(buff, header);
     // add custom http_response_header
@@ -378,13 +446,43 @@ void http_sendhtml(char* file){
     strcat(buff, filesizestr);
     strcat(buff, "\n\n");
 
-    // add content
-    strcat(buff, content); // use memcpy instead
+    // write header
+    write(http_client, buff, strlen(buff));
+
+    // write content
+    write(http_client, content, content_size);
 
     write(http_client, buff, strlen(buff));
-    if(debug)
-        printf("%s\n", "[DEBUG] File has been sent.");
-    close(http_client);
+
+}
+
+/**************************************************************
+    Summery: 
+
+    Abstraction to send html
+
+    @PARAMS: name of file
+    @returns: void
+**************************************************************/
+void http_sendhtml(char* file){
+
+    http_add_content_type("text/html");
+    http_sendfile(file);
+
+}
+
+/**************************************************************
+    Summery: 
+
+    Abstraction to send image
+
+    @PARAMS: name of file
+    @returns: void
+**************************************************************/
+void http_sendimg(char* file){
+
+    http_add_content_type("image/gif");
+    http_sendfile(file);
 }
 
 
@@ -426,7 +524,6 @@ void http_sendtext(char* text){
     write(http_client, buff, strlen(buff));
     if(debug)
         printf("%s\n", "[DEBUG] File has been sent.");
-    close(http_client);
 }
 
 /**************************************************************
@@ -444,6 +541,11 @@ void http_sendtext(char* text){
     body (if any, Section 3.3).
 
     http-URI = "http:" "//" authority path-abempty [ "?" query ] [ "#" fragment ]
+
+    A server MUST respond with a 400 (Bad Request) status code to any
+    HTTP/1.1 request message that lacks a Host header field and to any
+    request message that contains more than one Host header field or a
+    Host header field with an invalid field-value.
     
     @PARAMS: request buffer
     @returns: VOID
@@ -453,6 +555,7 @@ void http_parser(char* buffer, char* content){
 
     char* get = strtok(buffer, " ");
     header.method = get;
+    header.total_headers = 0;
     get = strtok(NULL, " ");
 
 
@@ -471,13 +574,12 @@ void http_parser(char* buffer, char* content){
     }
 
     header.route = get;
-    printf("%s\n", header.route);
 
-    // check all lines
+    char* host = NULL;
+    char* connection = NULL;
     char* line = strtok(NULL, "\n");
     char* content_type_raw = NULL;
     while(line != NULL){
-
         // break on end of header
         if(strcmp(line, " ") < 0){
             break;
@@ -486,8 +588,36 @@ void http_parser(char* buffer, char* content){
         if(strstr(line, "Content-Type") != NULL){
             content_type_raw = line;
         }
+
+        // check for host header
+        if(strstr(line, "Host:") != NULL){
+            host = line;
+        }
+
+        if(strstr(line, "Connection:") != NULL){
+            connection = line;
+        }
+
+        header.headers[header.total_headers] = line;
+        header.total_headers++;
+
         line = strtok(NULL, "\n");
 
+    }
+
+    if(host == NULL){
+        http_400();
+        return;
+    }
+
+    // handle potential keep alive header
+    if(connection != NULL){
+        char* connection_type = strtok(connection, " ");
+        connection_type = strtok(NULL, " ");
+        if(strstr(connection_type, "keep-alive") != NULL){
+            http_add_responseheader("Connection: keep-alive");
+            header.keep_alive = 1;
+        }
     }
 
     // get http content type
@@ -504,6 +634,101 @@ void http_parser(char* buffer, char* content){
         header.content = content;
     }
 }
+
+/**************************************************************
+    Summery: 
+
+    Handles if a socket closes
+
+    @PARAMS: VOID
+    @returns: VOID
+**************************************************************/
+void sigpipe_handler()
+{
+    printf(KRED "[ERROR] HTTP client socket has closed unexpectedly!\n" KWHT);
+    // close connection
+    http_free_routes();
+    close(http_server_fd);
+    close(http_client);
+    if(debug)
+        printf(KMAG "%s PID: %ld, PORT %d!.\n" KWHT, "[DEBUG] Child process ended! - ", (long)getpid(), client_addr.sin_port);
+    exit(0);
+}
+
+/**************************************************************
+    Summery: 
+
+    Handles a request. With connection keep-alive;
+
+    @PARAMS: PORT,  set debugmode
+    @returns: VOID
+**************************************************************/
+void http_handle_request(char* buffer){
+    //child ->
+    const char *delim = "\r\n\r\n";
+
+    signal(SIGPIPE,sigpipe_handler);
+
+    if(debug){
+        printf(KYEL "%s\n" KWHT, buffer);
+    }
+
+    char* buffer_header = strstr(buffer, delim);
+    http_parser(buffer, buffer_header+strlen(delim));
+
+    if(debug)
+        printf("%s\n", "------- user start -------");
+
+    http_route_handler();
+
+    if(debug)
+        printf("%s\n", "-------- user end --------");
+
+    // if keep alive
+    if(header.keep_alive == 1){
+        int empty_request_limit = 8;
+        while(empty_request_limit > 0){
+            fd_set readSockSet;
+            struct timeval timeout;
+            FD_ZERO(&readSockSet);
+            FD_SET(http_client, &readSockSet);
+
+            // wait for new connection for 8 seconds.
+            timeout.tv_sec = 8;
+            timeout.tv_usec = 0;
+
+            int retval = select(FD_SETSIZE, &readSockSet, NULL, NULL, &timeout);
+            if(retval > 0){
+                //printf("%s %d %d\n", "[CHILD] New request from keep-alive", client_addr.sin_port, client_addr.sin_family);
+                char buffer2[HTTP_BUFFER_SIZE-1] = {0};
+                int valread = recv(http_client, buffer2, HTTP_BUFFER_SIZE, 0);
+                buffer2[HTTP_BUFFER_SIZE-2] = 0;
+
+                if(valread == 0 || buffer2[0] == 0){
+                    sleep(1);
+                    empty_request_limit--;
+                    continue;
+                } else {
+                    free(http_response_header);
+                    http_setup_header();
+                    printf("%s\n", "[CHILD] Handling new request!");
+                    http_handle_request(buffer2);
+                    return;
+                }
+            } else {
+                break;
+            }
+        }
+    }
+    // close connection
+    http_free_routes();
+    close(http_server_fd);
+    close(http_client);
+    if(debug)
+        printf(KMAG "%s PID: %ld, PORT: %d!.\n" KWHT, "[DEBUG] Child process ended! - ", (long)getpid(), client_addr.sin_port);
+    exit(0);
+}
+
 
 /**************************************************************
     Summery: 
@@ -526,11 +751,11 @@ void http_parser(char* buffer, char* content){
     @returns: VOID
 **************************************************************/
 void http_start(int PORT, int debugmode){
-    printf("%s %d\n", "[STARTUP] Starting HTTP server on port", PORT);
+    printf(KBLU "%s %d\n" KWHT, "[STARTUP] Starting HTTP server on port", PORT);
     debug = debugmode;
 
     if(debug)
-        printf("%s\n", "[STARTUP] Debug mode is active");
+        printf(KBLU "%s\n" KWHT, "[STARTUP] Debug mode is active");
 
     
     //Define sockets
@@ -538,7 +763,6 @@ void http_start(int PORT, int debugmode){
     /*
     The htons() function makes sure that numbers are stored in memory in network byte order, which is with the most significant byte first.
     */
-    struct sockaddr_in address;
     int addrlen = sizeof(address);
 
     /*server socket
@@ -552,7 +776,7 @@ void http_start(int PORT, int debugmode){
         exit(EXIT_FAILURE);
     }
 
-    printf("%s\n", "[STARTUP] TCP socket succesfully created.");
+    printf(KBLU "%s\n" KWHT, "[STARTUP] TCP socket succesfully created.");
 
     //define sockaddr_in struct variables
     address.sin_family = AF_INET;
@@ -586,14 +810,11 @@ void http_start(int PORT, int debugmode){
         exit(EXIT_FAILURE);
     }
 
-    printf("%s\n", "[STARTUP] Server now accepting requests...");
+    printf(KBLU "%s\n" KWHT, "[STARTUP] Server now accepting requests...");
 
     signal(SIGINT, intHandler);
 
     // setup for response header;
-    http_response_header = malloc(strlen(http_default_header)+1);
-    strcpy(http_response_header, http_default_header);
-    http_response_header[strlen(http_default_header)+1] = 0;
 
     // check for headers in waitlist
     if(http_total_custom_header > 0){
@@ -604,47 +825,68 @@ void http_start(int PORT, int debugmode){
         }
     }
 
+    client_addr.sin_port = 0;
+
+    http_setup_header();
+
     //listen loop
     while(1)
     {
+        /*
+            Main to accept new clients
+        */
         //accpet new socket connection
         //int accept(int sockfd, struct sockaddr *addr, socklen_t *addrlen);
-        if ((http_client = accept(http_server_fd, (struct sockaddr *)&address, (socklen_t*)&addrlen)) < 0)
+        if ((http_client = accept(http_server_fd, (struct sockaddr *)&client_addr, (socklen_t*)&addrlen)) < 0)
         {
             //error handling
             perror("accept");
             exit(EXIT_FAILURE);
         }
-        if(debug)
-            printf("%s", "[DEBUG] Incomming request for \n");
 
         http_request_counter++;
-
         if(fork() == 0){
-            //child ->
+            printf(KMAG "%s PID: %ld, PORT: %d!.\n" KWHT, "[DEBUG] Child process started! - ", (long)getpid(), client_addr.sin_port);
 
+            /*
+                Setup FD set with select to timeout socket that doesnt send anything.
+            */
 
-            const char *delim = "\r\n\r\n";
-    
+            if(debug)
+                printf(KGRN "%s PID: %ld, PORT: %d\n" KWHT, "[DEBUG] Accepted new connection, waiting for request...",(long)getpid(), client_addr.sin_port);
+
+            fd_set readSockSet;
+            struct timeval timeout;
+            FD_ZERO(&readSockSet);
+            FD_SET(http_client, &readSockSet);
+
+            // wait for new connection for 8 seconds.
+            timeout.tv_sec = 3;
+            timeout.tv_usec = 0;
             //prepare buffer and read from client
-            char buffer[HTTP_BUFFER_SIZE] = {0};
-            valread = read(http_client, buffer, HTTP_BUFFER_SIZE);
-            if(valread == 0){
-                printf("%s\n", "[DEBUG] Empty request ");
+            int retval = select(FD_SETSIZE, &readSockSet, NULL, NULL, &timeout);
+            if(retval > 0){
+
+                char buffer[HTTP_BUFFER_SIZE] = {0};
+                valread = recv(http_client, buffer, HTTP_BUFFER_SIZE-1, 0);
+                buffer[HTTP_BUFFER_SIZE-2] = 0;
+
+                // if empty request is recived close.
+                if(valread == 0){
+                    printf("%s\n", "[DEBUG] Empty request!");
+                    close(http_client);
+                    intHandler();
+                }
+                http_handle_request(buffer);
+            } else {
+                printf("%s PID: %ld, PORT: %d\n", "[DEBUG] Incomming connection timed out!", (long)getpid(), client_addr.sin_port);
+                close(http_client);
+                intHandler();
             }
-
-            printf("%s\n", buffer);
-
-            char* header = strstr(buffer, delim);
-
-            http_parser(buffer, header+strlen(delim));
-            http_route_handler();
-
-            http_free_routes();
-            close(http_server_fd);
-            exit(1);
+        } else {
+            close(http_client);
+            client_addr.sin_port = 0;
         }
 
-        close(http_client);
     }
 }
