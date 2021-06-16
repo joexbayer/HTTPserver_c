@@ -132,7 +132,7 @@ void http_free_routes(){
 
     for (int i = 0; i < http_routecounter; ++i)
     {
-        free(http_routes[http_routecounter]);
+        free(http_routes[i]);
     }
     free(http_response_header);
 }
@@ -142,7 +142,7 @@ void http_free_routes(){
     Loops through all routes and frees the allocted memory
 **************************************************************/
 void http_setup_header(){
-    http_response_header = malloc(strlen(http_default_header)+1);
+    http_response_header = malloc(strlen(http_default_header)+2);
     strcpy(http_response_header, http_default_header);
     http_response_header[strlen(http_default_header)+1] = 0;
 }
@@ -179,7 +179,7 @@ int http_add_responseheader(char* header){
     strcpy(result, http_response_header);
     strcat(result, header);
     strcat(result, "\n");
-    result[total_length] = 0;
+    result[total_length-1] = 0;
     free(http_response_header);
     http_response_header = result;
     return strlen(header);
@@ -204,7 +204,7 @@ int http_add_content_type(char* content_type_value){
 
     strcpy(result, content_type);
     strcat(result, content_type_value);
-    result[total_length] = 0;
+    result[total_length-1] = 0;
 
     http_add_responseheader(result);
 
@@ -366,9 +366,10 @@ char* http_get_request_header(char* header_name){
 
     for (int i = 0; i < header.total_headers; ++i)
     {
-
+        // possible malloc nullbyte error
         current_header = malloc(strlen(header.headers[i]));
-        strcpy(current_header, header.headers[i]);
+        memcpy(current_header, header.headers[i], strlen(header.headers[i]));
+        current_header[strlen(header.headers[i])] = 0;
         char* current_header_name = strtok(current_header, " ");
 
         if(current_header != NULL && strcmp(header_name, current_header_name) == 0){
@@ -461,6 +462,8 @@ void http_sendfile(char* file){
     if(readf != 1){
         exit(EXIT_FAILURE);
     }
+
+    fclose(fp);
 
     // allocate response buffer for content and reponse header
     char buff[content_size+100+strlen(http_response_header)];
@@ -847,6 +850,7 @@ void http_start(int PORT, int debugmode){
         {
             //error handling
             perror("accept");
+            intHandler();
             exit(EXIT_FAILURE);
         }
 

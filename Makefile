@@ -5,3 +5,6 @@ all: server
 
 server: server.c http_server.c
 	gcc server.c http_server.c $(CFLAGS) -o server && ./server
+
+valgrind: server.c http_server.c
+	gcc server.c http_server.c $(CFLAGS) -o server && valgrind --leak-check=full --show-leak-kinds=all ./server
