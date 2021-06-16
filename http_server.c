@@ -1,12 +1,15 @@
 #include "http_server.h"
 
 /*
-    TODO: 
-    POST / GET, enable global indexing with addfoler("/"), ? delimiter as function paramters.
-    Response header
-    Cookies
+    TODO:
+    Parse accept header
+    POST / GET [DONE]
+    enable global indexing with addfoler("/") [DONE]
+    ? delimiter as function paramters. [DONE]
+    Response header [ONGOING]
+    Cookies!!
     Handle, multipart/form-data with boundry
-    Get _request_header function
+    Get _request_header function [DONE]
     Handle absolute form:
         An example absolute-form of request-line would be:
 
@@ -31,6 +34,15 @@
 
     Hypertext Transfer Protocol (HTTP/1.1): Authentication
     https://datatracker.ietf.org/doc/html/rfc7235
+
+    Secruity: 9.x RFC 7230
+
+    Recipients ought to carefully limit the extent to which they process
+    other protocol elements, including (but not limited to) request
+    methods, response status phrases, header field-names, numeric values,
+    and body chunks.  Failure to limit such processing can result in
+    buffer overflows, arithmetic overflows, or increased vulnerability to
+    denial-of-service attacks.
 
 */
 
@@ -287,7 +299,7 @@ void http_route_handler(){
             strcat(file, header.route);
             file[strlen(header.route)+2] = 0;
 
-            http_sendhtml(file);
+            http_sendfile(file);
             return;
         }
     }
@@ -399,8 +411,26 @@ void http_sendfile(char* file){
         http_404();
         return;
     }
+
+    // get file extension
+    char file_copy[strlen(file)+1];
+    strcpy(file_copy, file);
+    file_copy[strlen(file)+1] = 0;
+
+    char* file_ext = strtok(file_copy, ".");
+    file_ext = strtok(NULL, ".");
+
+    if(strcmp(file_ext, "jpg") == 0 || strcmp(file_ext, "png") == 0 || strcmp(file_ext, "jpeg") == 0 || strcmp(file_ext, "ico") == 0){
+        http_add_content_type("image/gif");
+    } else if(strcmp(file_ext, "html") == 0){
+        http_add_content_type("text/html");
+    } else if(strcmp(file_ext, "js") == 0){
+        http_add_content_type("text/javascript;charset=UTF-8");
+    } else {
+        http_add_content_type("text/plain");
+    }
+
      // open reponse file
-    printf("%s\n", file);
     FILE *fp = fopen(file, "rb");
     if ( NULL == fp ) {
         perror("FILE");
@@ -454,35 +484,6 @@ void http_sendfile(char* file){
 
     write(http_client, buff, strlen(buff));
 
-}
-
-/**************************************************************
-    Summery: 
-
-    Abstraction to send html
-
-    @PARAMS: name of file
-    @returns: void
-**************************************************************/
-void http_sendhtml(char* file){
-
-    http_add_content_type("text/html");
-    http_sendfile(file);
-
-}
-
-/**************************************************************
-    Summery: 
-
-    Abstraction to send image
-
-    @PARAMS: name of file
-    @returns: void
-**************************************************************/
-void http_sendimg(char* file){
-
-    http_add_content_type("image/gif");
-    http_sendfile(file);
 }
 
 
@@ -605,6 +606,11 @@ void http_parser(char* buffer, char* content){
 
     }
 
+    /*
+        5.4 - RFC 7230
+        A server MUST respond with a 400 (Bad Request) status code to any
+        HTTP/1.1 request message that lacks a Host header field
+    */
     if(host == NULL){
         http_400();
         return;
@@ -677,16 +683,16 @@ void http_handle_request(char* buffer){
     http_parser(buffer, buffer_header+strlen(delim));
 
     if(debug)
-        printf("%s\n", "------- user start -------");
+        printf("%s\n", "--------- Running user defined functions --------");
 
     http_route_handler();
 
     if(debug)
-        printf("%s\n", "-------- user end --------");
+        printf("%s\n", "-------- Finished user defined functions --------");
 
     // if keep alive
     if(header.keep_alive == 1){
-        int empty_request_limit = 8;
+        int empty_request_limit = 32;
         while(empty_request_limit > 0){
             fd_set readSockSet;
             struct timeval timeout;
@@ -705,7 +711,7 @@ void http_handle_request(char* buffer){
                 buffer2[HTTP_BUFFER_SIZE-2] = 0;
 
                 if(valread == 0 || buffer2[0] == 0){
-                    sleep(1);
+                    usleep(250);
                     empty_request_limit--;
                     continue;
                 } else {
@@ -846,7 +852,9 @@ void http_start(int PORT, int debugmode){
 
         http_request_counter++;
         if(fork() == 0){
-            printf(KMAG "%s PID: %ld, PORT: %d!.\n" KWHT, "[DEBUG] Child process started! - ", (long)getpid(), client_addr.sin_port);
+
+            if(debug)
+                printf(KMAG "%s PID: %ld, PORT: %d!.\n" KWHT, "[DEBUG] Child process started! - ", (long)getpid(), client_addr.sin_port);
 
             /*
                 Setup FD set with select to timeout socket that doesnt send anything.
@@ -855,30 +863,36 @@ void http_start(int PORT, int debugmode){
             if(debug)
                 printf(KGRN "%s PID: %ld, PORT: %d\n" KWHT, "[DEBUG] Accepted new connection, waiting for request...",(long)getpid(), client_addr.sin_port);
 
+            // set FD sets
             fd_set readSockSet;
             struct timeval timeout;
             FD_ZERO(&readSockSet);
             FD_SET(http_client, &readSockSet);
 
-            // wait for new connection for 8 seconds.
+            // wait for request for 3 seconds.
             timeout.tv_sec = 3;
             timeout.tv_usec = 0;
-            //prepare buffer and read from client
+            // select for http_client
             int retval = select(FD_SETSIZE, &readSockSet, NULL, NULL, &timeout);
             if(retval > 0){
 
+                //prepare buffer and read from client
                 char buffer[HTTP_BUFFER_SIZE] = {0};
                 valread = recv(http_client, buffer, HTTP_BUFFER_SIZE-1, 0);
                 buffer[HTTP_BUFFER_SIZE-2] = 0;
 
                 // if empty request is recived close.
                 if(valread == 0){
-                    printf("%s\n", "[DEBUG] Empty request!");
+                    printf("%s\n", "[ERROR] Empty request!");
                     close(http_client);
                     intHandler();
                 }
+
+                // send request to handle function
                 http_handle_request(buffer);
+
             } else {
+                // if select timed out
                 printf("%s PID: %ld, PORT: %d\n", "[DEBUG] Incomming connection timed out!", (long)getpid(), client_addr.sin_port);
                 close(http_client);
                 intHandler();

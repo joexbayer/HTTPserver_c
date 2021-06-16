@@ -4,7 +4,7 @@ void home(){
 
     printf("%s\n", http_get_request_header("Host:"));
 
-    http_sendhtml("index.html");
+    http_sendfile("index.html");
 }
 
 void text(){
@@ -13,7 +13,7 @@ void text(){
 }
 
 void favicon(){
-    http_sendimg("favicon.ico");
+    http_sendfile("favicon.ico");
 }
 
 // login example
@@ -24,7 +24,7 @@ void login(){
 
     if(strcmp(username, "joe") == 0 && strcmp(password, "123") == 0){
 
-        http_sendhtml("index.html");
+        http_sendfile("index.html");
         return;
     }
     http_404();
@@ -36,7 +36,7 @@ int main()
     http_addroute("GET", "/", &home);
     http_addroute("POST", "/login", &login);
     http_addroute("GET", "/text", &text);
-    http_addroute("GET", "/picture", &favicon);
+    http_addroute("GET", "/favicon.ico", &favicon);
     http_addfolder("/");
 
     http_add_responseheader("Content-Security-Policy: script-src 'unsafe-inline';");

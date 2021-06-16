@@ -59,9 +59,8 @@ struct http_route
 int http_addfolder(char* folder);
 int http_add_responseheader(char* header);
 int http_addroute(char* method, char* path, void (*f)());
-void http_sendhtml(char* file);
+void http_sendfile(char* file);
 void http_sendtext(char* text);
-void http_sendimg(char* file);
 void http_start(int port, int debugmode);
 char* http_get_request_header(char* header_name);
 char* http_get_parameter(char* variable, int mode);
