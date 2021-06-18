@@ -2,6 +2,10 @@
 
 /*
     TODO:
+    WEBSOCKETS:
+        https://sookocheff.com/post/networking/how-do-websockets-work/
+        https://datatracker.ietf.org/doc/html/rfc6455
+
     Parse accept header
     POST / GET [DONE]
     enable global indexing with addfoler("/") [DONE]
@@ -222,6 +226,8 @@ int http_add_content_type(char* content_type_value){
     Makes a route accessible and calls user defined function. 
     The user defined functions must have return type of void, and have no parameters.
 
+    All general-purpose servers MUST support the methods GET and HEAD.
+
     @PARAMS: name of route, function pointer.
     @returns: number of total routes, -1 on error
 **************************************************************/
@@ -354,7 +360,7 @@ char* http_get_parameter(char* variable, int mode){
 /**************************************************************
     Summery: 
 
-    Searches request headers for given header name and returns
+    Searches request-headers for given header name and returns
     the value if found.
 
     @PARAMS: name of header
@@ -550,6 +556,11 @@ void http_sendtext(char* text){
     HTTP/1.1 request message that lacks a Host header field and to any
     request message that contains more than one Host header field or a
     Host header field with an invalid field-value.
+
+    An origin server that receives a Content-Location field in a request
+    message MUST treat the information as transitory request context
+    rather than as metadata to be saved verbatim as part of the
+    representation.
     
     @PARAMS: request buffer
     @returns: VOID
@@ -767,11 +778,7 @@ void http_start(int PORT, int debugmode){
         printf(KBLU "%s\n" KWHT, "[STARTUP] Debug mode is active");
 
     
-    //Define sockets
     long valread;
-    /*
-    The htons() function makes sure that numbers are stored in memory in network byte order, which is with the most significant byte first.
-    */
     int addrlen = sizeof(address);
 
     /*server socket
@@ -788,6 +795,9 @@ void http_start(int PORT, int debugmode){
     printf(KBLU "%s\n" KWHT, "[STARTUP] TCP socket succesfully created.");
 
     //define sockaddr_in struct variables
+    /*
+    The htons() function makes sure that numbers are stored in memory in network byte order, which is with the most significant byte first.
+    */
     address.sin_family = AF_INET;
     address.sin_addr.s_addr = INADDR_ANY;
     address.sin_port = htons( PORT );
