@@ -530,13 +530,7 @@ void http_parser(char* buffer, char* content){
     header.total_headers = 0;
     get = strtok(NULL, " ");
 
-    printf("%s\n", get);
-
-    char* get_save = malloc(strlen(get)+1);
-    strcpy(get_save, get);
-    get_save[strlen(get)+1] = 0;
-
-    header.route = get;
+    char* uri = get;
 
     char* host = NULL;
     char* connection = NULL;
@@ -604,24 +598,19 @@ void http_parser(char* buffer, char* content){
     }
 
     // check for uri query
-    if(strstr(get_save, "?") != NULL){
-        char* query = strtok(get_save, "?");
+    if(strstr(uri, "?") != NULL){
+        char* query = strtok(uri, "?");
         query = strtok(NULL, "?");
-        char* new_query = malloc(strlen(query)+1);
-        strcpy(new_query, query);
-        new_query[strlen(query)+1] = 0;
-        header.query = new_query;
+        header.query = query;
     }
         // check for uri fragment
-    if(strstr(get_save, "#") != NULL){
-        char* fragment = strtok(get_save, "#");
+    if(strstr(uri, "#") != NULL){
+        char* fragment = strtok(uri, "#");
         fragment = strtok(NULL, "#");
-        char* new_fragment = malloc(strlen(fragment)+1);
-        strcpy(new_fragment, fragment);
-        new_fragment[strlen(fragment)+1] = 0;
-        header.fragment = new_fragment;
+        header.fragment = fragment;
     }
-    free(get_save);
+
+    header.route = uri;
 
 }
 
@@ -703,7 +692,6 @@ void http_handle_request(char* buffer){
                 } else {
                     free(http_response_header);
                     http_setup_header();
-                    free(header.query);
                     printf("%s\n", "[CHILD] Handling new request!");
                     http_handle_request(buffer2);
                     return;
@@ -715,7 +703,6 @@ void http_handle_request(char* buffer){
     }
     // close connection
     http_free_routes();
-    free(header.query);
     close(http_server_fd);
     close(http_client);
     if(debug)
