@@ -33,36 +33,20 @@
 
 */
 
-/*************************************************************
-    http_routes is a list of added routes.
-    To add routes use http_addroute(char* route, void (*f)());
+int http_client = -1; // http client socket connection
+int http_server_fd = -1; // http server socket
 
-    Example: http_addroute("/dog", &dog);
-**************************************************************/
-int http_client = -1;
-struct http_route* http_routes[NUMBER_OF_ROUTES];
+int current_port = 0; // port that is currently used
+
+struct http_route* http_routes[NUMBER_OF_ROUTES]; // http_routes is a list of added routes.
 int http_routecounter = 0;
 
+int http_request_counter = 0; // for stats
 
-int http_server_fd;
-
-struct sockaddr_in address, client_addr;
-
-int http_request_counter = 0;
-
-/**************************************************************
-    http_folders contains names of folders that are able to be accessed throuhg indexing.
-    If the folders name is inside the indexed path, the file is returned, if present.
-
-    To add folders use http_addfolder(char* folder); 
-
-    Example: http_addfolder("dogs");
-**************************************************************/
-char* http_folders[NUMBER_OF_FOLDERS];
+char* http_folders[NUMBER_OF_FOLDERS]; // list of indexable folders
 int http_foldercount = 0;
 
-// custom headers to be added after server start.
-char* http_custom_headers[10];
+char* http_custom_headers[10]; // custom headers to be added after server start.
 int http_total_custom_header = 0;
 
 int debug = 0; // Global variable to enable debug mode.
@@ -351,7 +335,7 @@ void intHandler(){
     printf("%s\n", "[CLOSING] Closing connection...");
     http_free_routes();
     close(http_server_fd);
-    printf(KRED "%s PID: %ld, PORT: %d!.\n" KWHT, "[CLOSING] Goodbye ", (long)getpid(), client_addr.sin_port);
+    printf(KRED "%s PID: %ld, PORT: %d!.\n" KWHT, "[CLOSING] Goodbye ", (long)getpid(), current_port);
     exit(0);
 }
 
@@ -626,7 +610,7 @@ void sigpipe_handler()
     close(http_server_fd);
     close(http_client);
     if(debug)
-        printf(KMAG "%s PID: %ld, PORT %d!.\n" KWHT, "[DEBUG] Child process ended! - ", (long)getpid(), client_addr.sin_port);
+        printf(KMAG "%s PID: %ld, PORT %d!.\n" KWHT, "[DEBUG] Child process ended! - ", (long)getpid(), current_port);
     exit(0);
 }
 
@@ -676,7 +660,6 @@ void http_handle_request(char* buffer){
 
             int retval = select(FD_SETSIZE, &readSockSet, NULL, NULL, &timeout);
             if(retval > 0){
-                //printf("%s %d %d\n", "[CHILD] New request from keep-alive", client_addr.sin_port, client_addr.sin_family);
                 char buffer2[HTTP_BUFFER_SIZE-1] = {0};
                 int valread = recv(http_client, buffer2, HTTP_BUFFER_SIZE, 0);
                 buffer2[HTTP_BUFFER_SIZE-2] = 0;
@@ -702,7 +685,7 @@ void http_handle_request(char* buffer){
     close(http_server_fd);
     close(http_client);
     if(debug)
-        printf(KMAG "%s PID: %ld, PORT: %d!.\n" KWHT, "[DEBUG] Child process ended! - ", (long)getpid(), client_addr.sin_port);
+        printf(KMAG "%s PID: %ld, PORT: %d!.\n" KWHT, "[DEBUG] Child process ended! - ", (long)getpid(), current_port);
     exit(0);
 }
 
@@ -728,6 +711,8 @@ void http_handle_request(char* buffer){
     @returns: VOID
 **************************************************************/
 void http_start(int PORT, int debugmode){
+    struct sockaddr_in address, client_addr;
+
     printf(KBLU "%s %d\n" KWHT, "[STARTUP] Starting HTTP server on port", PORT);
     debug = debugmode;
 
@@ -823,16 +808,16 @@ void http_start(int PORT, int debugmode){
 
         http_request_counter++;
         if(fork() == 0){
-
+            current_port = client_addr.sin_port;
             if(debug)
-                printf(KMAG "%s PID: %ld, PORT: %d!.\n" KWHT, "[DEBUG] Child process started! - ", (long)getpid(), client_addr.sin_port);
+                printf(KMAG "%s PID: %ld, PORT: %d!.\n" KWHT, "[DEBUG] Child process started! - ", (long)getpid(), current_port);
 
             /*
                 Setup FD set with select to timeout socket that doesnt send anything.
             */
 
             if(debug)
-                printf(KGRN "%s PID: %ld, PORT: %d\n" KWHT, "[DEBUG] Accepted new connection, waiting for request...",(long)getpid(), client_addr.sin_port);
+                printf(KGRN "%s PID: %ld, PORT: %d\n" KWHT, "[DEBUG] Accepted new connection, waiting for request...",(long)getpid(), current_port);
 
             // set FD sets
             fd_set readSockSet;
@@ -864,7 +849,7 @@ void http_start(int PORT, int debugmode){
 
             } else {
                 // if select timed out
-                printf("%s PID: %ld, PORT: %d\n", "[DEBUG] Incomming connection timed out!", (long)getpid(), client_addr.sin_port);
+                printf("%s PID: %ld, PORT: %d\n", "[DEBUG] Incomming connection timed out!", (long)getpid(), current_port);
                 close(http_client);
                 intHandler();
             }
