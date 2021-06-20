@@ -61,6 +61,7 @@
 					<input placeholder="Password" type="password" name="password">
 					<button>Log in</button>
 				</form>
+				<p id="reponse"></p>
 		
 
 		<div style="width: 50%;margin: auto;text-align: left;">
@@ -69,6 +70,19 @@
 			<p>Both handling POST and GET requests with parameters in GET query / fragment or part of POST content.</p>
 		</div>
 	</div>
+
+	<script type="text/javascript">
+		var url_string = window.location.href;
+		var url = new URL(url_string);
+		var c = url.searchParams.get("success");
+		if(c == "1"){
+			document.getElementById("reponse").innerHTML = "Logged inn!";
+			document.getElementById("reponse").style.color = "green";
+		} else {
+			document.getElementById("reponse").innerHTML = "Wrong password or username!";
+			document.getElementById("reponse").style.color = "red";
+		}
+	</script>
 
 </body>
 </html>	

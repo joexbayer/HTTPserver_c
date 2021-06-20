@@ -24,10 +24,11 @@ void login(){
 
     if(strcmp(username, "joe") == 0 && strcmp(password, "123") == 0){
 
-        http_sendfile("index.html");
+        http_redirect("/?success=1");
         return;
     }
-    http_404();
+
+    http_redirect("/?success=0");
 }
 
 int main()

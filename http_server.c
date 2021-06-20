@@ -1,24 +1,7 @@
 #include "http_server.h"
+#include "utils.h"
 
 /*
-    TODO:
-    WEBSOCKETS:
-        https://sookocheff.com/post/networking/how-do-websockets-work/
-        https://datatracker.ietf.org/doc/html/rfc6455
-
-    Parse accept header
-    POST / GET [DONE]
-    enable global indexing with addfoler("/") [DONE]
-    ? delimiter as function paramters. [DONE]
-    Response header [ONGOING]
-    Cookies!!
-    Handle, multipart/form-data with boundry
-    Get _request_header function [DONE]
-    Handle absolute form:
-        An example absolute-form of request-line would be:
-
-        GET http://www.example.org/pub/WWW/TheProject.html HTTP/1.1
-
     Standards and Syntax:
 
     Hypertext Transfer Protocol (HTTP/1.1): Message Syntax and Routing
@@ -90,44 +73,7 @@ char* http_default_header = "Server: UniqueHttpd (Unix)\n";
 
 char* http_response_header;
 
-//
 
-
-/**************************************************************
-    Summery: 
-
-    http_404 returns the 404 status code. It is called if a file or route is not found.
-
-    @PARAMS: NONE
-    @returns: VOID
-**************************************************************/
-void http_404(){
-    char *header = "HTTP/1.1 404 Not Found\nContent-Type: text/html\nContent-Length: 13\n\n 404 Not found";
-    int w = write(http_client, header, strlen(header)+2);
-    if(w == 0){
-         printf(KRED "%s\n" KWHT, "[ERROR] 404 Response could not be sent!");
-    }
-    if(debug)
-        printf("%s\n", "[DEBUG] 404 Response has been sent.");
-}
-
-/**************************************************************
-    Summery: 
-
-    http_400 returns the 400 bad request. It is called when headers are incorrect.
-
-    @PARAMS: NONE
-    @returns: VOID
-**************************************************************/
-void http_400(){
-    char *header = "HTTP/1.1 400 Bad Request \nContent-Type: text/html\nContent-Length: 15\n\n 400 Bad Request";
-    int w = write(http_client, header, strlen(header)+2);
-    if(w == 0){
-         printf(KRED "%s\n" KWHT, "[ERROR] 400 Response could not be sent!");
-    }
-    if(debug)
-        printf("%s\n", "[DEBUG] 400 Response has been sent.");
-}
 
 /**************************************************************
     Loops through all routes and frees the allocted memory
@@ -139,6 +85,14 @@ void http_free_routes(){
         free(http_routes[i]);
     }
     free(http_response_header);
+}
+
+
+/**************************************************************
+    Redirects request to given location
+**************************************************************/
+void http_redirect(char* location){
+    http_301(http_client, location);
 }
 
 
@@ -286,6 +240,10 @@ int http_addfolder(char* folder){
 **************************************************************/
 void http_route_handler(){
 
+
+    header.route = strtok(header.route, "?");
+    printf("%s\n", header.query);
+
     for (int i = 0; i < http_routecounter; ++i)
     {
         // checks if both route and method is correct.
@@ -309,7 +267,7 @@ void http_route_handler(){
             return;
         }
     }
-    http_404();
+    http_404(http_client);
 }
 /**************************************************************
     Summery: 
@@ -415,7 +373,7 @@ void intHandler(){
 void http_sendfile(char* file){
 
     if(access(file, F_OK)) {
-        http_404();
+        http_404(http_client);
         return;
     }
 
@@ -567,32 +525,23 @@ void http_sendtext(char* text){
 **************************************************************/
 void http_parser(char* buffer, char* content){
     // get method
-
     char* get = strtok(buffer, " ");
     header.method = get;
     header.total_headers = 0;
     get = strtok(NULL, " ");
 
+    printf("%s\n", get);
 
-    // check for uri query
-    if(strstr(get, "?") != NULL){
-        char* query = strtok(get, "?");
-        query = strtok(NULL, "?");
-        header.query = query;
-    }
-
-    // check for uri fragment
-    if(strstr(get, "#") != NULL){
-        char* fragment = strtok(get, "#");
-        fragment = strtok(NULL, "#");
-        header.fragment = fragment;
-    }
+    char* get_save = malloc(strlen(get)+1);
+    strcpy(get_save, get);
+    get_save[strlen(get)+1] = 0;
 
     header.route = get;
 
     char* host = NULL;
     char* connection = NULL;
     char* line = strtok(NULL, "\n");
+
     char* content_type_raw = NULL;
     while(line != NULL){
         // break on end of header
@@ -626,8 +575,8 @@ void http_parser(char* buffer, char* content){
         HTTP/1.1 request message that lacks a Host header field
     */
     if(host == NULL){
-        http_400();
-        return;
+        http_400(http_client);
+        exit(1);
     }
 
     // handle potential keep alive header
@@ -653,6 +602,27 @@ void http_parser(char* buffer, char* content){
 
         header.content = content;
     }
+
+    // check for uri query
+    if(strstr(get_save, "?") != NULL){
+        char* query = strtok(get_save, "?");
+        query = strtok(NULL, "?");
+        char* new_query = malloc(strlen(query)+1);
+        strcpy(new_query, query);
+        new_query[strlen(query)+1] = 0;
+        header.query = new_query;
+    }
+        // check for uri fragment
+    if(strstr(get_save, "#") != NULL){
+        char* fragment = strtok(get_save, "#");
+        fragment = strtok(NULL, "#");
+        char* new_fragment = malloc(strlen(fragment)+1);
+        strcpy(new_fragment, fragment);
+        new_fragment[strlen(fragment)+1] = 0;
+        header.fragment = new_fragment;
+    }
+    free(get_save);
+
 }
 
 /**************************************************************
@@ -706,8 +676,10 @@ void http_handle_request(char* buffer){
 
     // if keep alive
     if(header.keep_alive == 1){
+        // a 32 empty request limit for keep alive
         int empty_request_limit = 32;
         while(empty_request_limit > 0){
+
             fd_set readSockSet;
             struct timeval timeout;
             FD_ZERO(&readSockSet);
@@ -731,6 +703,7 @@ void http_handle_request(char* buffer){
                 } else {
                     free(http_response_header);
                     http_setup_header();
+                    free(header.query);
                     printf("%s\n", "[CHILD] Handling new request!");
                     http_handle_request(buffer2);
                     return;
@@ -742,6 +715,7 @@ void http_handle_request(char* buffer){
     }
     // close connection
     http_free_routes();
+    free(header.query);
     close(http_server_fd);
     close(http_client);
     if(debug)

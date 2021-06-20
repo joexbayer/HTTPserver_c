@@ -1,0 +1,10 @@
+#include <sys/socket.h>
+#include <stdio.h>
+#include <unistd.h>
+#include <stdlib.h>
+#include <netinet/in.h>
+#include <string.h>
+#include <sys/stat.h>
+#include <math.h>
+#include <signal.h>
+#include <sys/select.h>
