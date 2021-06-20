@@ -4,7 +4,7 @@ void home(){
 
     printf("%s\n", http_get_request_header("Host:"));
 
-    http_sendfile("index.html");
+    http_sendfile("www/index.html");
 }
 
 void text(){
@@ -13,7 +13,7 @@ void text(){
 }
 
 void favicon(){
-    http_sendfile("favicon.ico");
+    http_sendfile("www/favicon.ico");
 }
 
 // login example

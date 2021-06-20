@@ -240,10 +240,6 @@ int http_addfolder(char* folder){
 **************************************************************/
 void http_route_handler(){
 
-
-    header.route = strtok(header.route, "?");
-    printf("%s\n", header.query);
-
     for (int i = 0; i < http_routecounter; ++i)
     {
         // checks if both route and method is correct.
