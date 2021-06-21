@@ -479,7 +479,6 @@ void http_sendfile(char* file){
 
 }
 
-
 /**************************************************************
     Summery: 
 
@@ -561,6 +560,7 @@ void http_parser(char* buffer, char* content){
     char* host = NULL;
     char* connection = NULL;
     char* content_type_raw = NULL;
+    char* content_length = NULL;
     char* cookies = NULL;
 
     char* line = strtok(NULL, "\n");
@@ -586,6 +586,10 @@ void http_parser(char* buffer, char* content){
 
         if(strstr(line, "Cookie:") != NULL){
             cookies = line;
+        }
+
+        if(strstr(line, "Content-Length:") != NULL){
+            content_length = line;
         } 
 
         header.headers[header.total_headers] = line;
@@ -624,6 +628,11 @@ void http_parser(char* buffer, char* content){
             // if content type is from form, set content has parameters
         if(strstr(header.content_type, "application/x-www-form-urlencoded") != NULL){
             header.query = content;
+        } else if(strstr(header.content_type, "multipart/form-data") != NULL){
+            content_type = strtok(NULL, " ");
+            char* boundary = strtok(content_type, "=");
+            boundary = strtok(NULL, "=");
+            header.boundary = boundary;
         }
 
         header.content = content;
@@ -636,6 +645,13 @@ void http_parser(char* buffer, char* content){
         header.cookies = cookies_parsed;
     } else {
         header.cookies = "";
+    }
+
+    // parse cookies
+    if(content_length != NULL){
+        char* content_length_parsed = strtok(content_length, " ");
+        content_length_parsed = strtok(NULL, " ");
+        header.content_length = content_length_parsed;
     }
 
     // check for uri query
@@ -721,15 +737,23 @@ void http_handle_request(char* buffer){
             int retval = select(FD_SETSIZE, &readSockSet, NULL, NULL, &timeout);
             if(retval > 0){
                 // recv buffer
+
                 char buffer2[HTTP_BUFFER_SIZE-1] = {0};
                 int valread = recv(http_client, buffer2, HTTP_BUFFER_SIZE, 0);
+
                 buffer2[HTTP_BUFFER_SIZE-2] = 0;
 
-                if(valread == 0 || buffer2[0] == 0){
+                if(valread == 0){
                     usleep(250);
                     empty_request_limit--;
                     continue;
                 } else {
+                    // if buffer contains boundary, then add to header content
+                    if(strstr(buffer2, header.boundary) != NULL){
+                        header.content = buffer2;
+                        continue;
+                    }
+
                     // reset header
                     free(http_response_header);
                     http_setup_header();

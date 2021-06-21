@@ -32,6 +32,10 @@ struct http_header
 	int total_headers;
 
 	int keep_alive;
+
+	char* boundary;
+
+	char* content_length;
 };
 
 struct http_route
