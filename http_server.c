@@ -33,15 +33,19 @@
 
 */
 
+// client struct
+int debug = 0;
 int http_client = -1; // http client socket connection
-int http_server_fd = -1; // http server socket
-
 int current_port = 0; // port that is currently used
+char* http_default_header = "Server: UniqueHttpd (Unix)\n";
+char* http_response_header;
+
+
+int http_server_fd = -1; // http server socket
+int http_request_counter = 0; // for stats
 
 struct http_route* http_routes[NUMBER_OF_ROUTES]; // http_routes is a list of added routes.
 int http_routecounter = 0;
-
-int http_request_counter = 0; // for stats
 
 char* http_folders[NUMBER_OF_FOLDERS]; // list of indexable folders
 int http_foldercount = 0;
@@ -49,13 +53,8 @@ int http_foldercount = 0;
 char* http_custom_headers[10]; // custom headers to be added after server start.
 int http_total_custom_header = 0;
 
-int debug = 0; // Global variable to enable debug mode.
-
 struct http_header header;// request header, will be filled by http_parser
 
-char* http_default_header = "Server: UniqueHttpd (Unix)\n";
-
-char* http_response_header;
 
 
 
@@ -518,6 +517,11 @@ void http_parser(char* buffer, char* content){
 
     char* content_type_raw = NULL;
     while(line != NULL){
+
+        /*
+            if line is longer than X, return 400 bad request.
+        */
+
         // break on end of header
         if(strcmp(line, " ") < 0){
             break;
