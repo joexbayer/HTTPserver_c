@@ -12,4 +12,6 @@
 #define KWHT  "\x1B[37m"
 
 
+char* find_content_type(char* file_ext);
+
 #endif

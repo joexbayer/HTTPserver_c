@@ -1,5 +1,4 @@
 #include "http_server.h"
-#include "utils.h"
 
 /*
     Standards and Syntax:
@@ -37,9 +36,9 @@
 int debug = 0;
 int http_client = -1; // http client socket connection
 int current_port = 0; // port that is currently used
-char* http_default_header = "Server: UniqueHttpd (Unix)\n";
-char* http_response_header;
 
+char* http_default_header = "Server: UniqueHttpd (Unix)\nContent-Security-Policy: script-src 'unsafe-inline';\n";
+char* http_response_header;
 
 int http_server_fd = -1; // http server socket
 int http_request_counter = 0; // for stats
@@ -49,9 +48,6 @@ int http_routecounter = 0;
 
 char* http_folders[NUMBER_OF_FOLDERS]; // list of indexable folders
 int http_foldercount = 0;
-
-char* http_custom_headers[10]; // custom headers to be added after server start.
-int http_total_custom_header = 0;
 
 struct http_header header;// request header, will be filled by http_parser
 
@@ -75,7 +71,7 @@ void http_free_routes(){
     Redirects request to given location
 **************************************************************/
 void http_redirect(char* location){
-    http_301(http_client, location);
+    http_301(http_client, location, http_response_header);
 }
 
 
@@ -100,19 +96,6 @@ void http_setup_header(){
 **************************************************************/
 int http_add_responseheader(char* header){
 
-    // if server has not been started, add to waitlist
-    if(http_response_header == NULL){
-        if(http_total_custom_header == 10){
-            return -1;
-        }
-
-        http_custom_headers[http_total_custom_header] = header;
-        http_total_custom_header++;
-        
-        return strlen(header);
-    }
-
-    // normal procedure
     int total_length = strlen(http_response_header)+strlen(header)+2;
 
     char* result = malloc(total_length);
@@ -153,6 +136,35 @@ int http_add_content_type(char* content_type_value){
 
     return strlen(content_type_value);
 }
+
+/**************************************************************
+    Summery: 
+
+    Abstraction to add cookie
+
+    @PARAMS: content type value
+    @returns: length of header.
+**************************************************************/
+int http_add_cookie(char* cookie_name, char* cookie_value){
+
+    char* cookie = "Set-Cookie: ";
+
+    int total_length = strlen(cookie)+strlen(cookie_value)+strlen(cookie_name)+2;
+    char* result = malloc(total_length);
+
+    strcpy(result, cookie);
+    strcat(result, cookie_name);
+    strcat(result, "=");
+    strcat(result, cookie_value);
+    result[total_length-1] = 0;
+
+    http_add_responseheader(result);
+
+    free(result);
+
+    return total_length;
+}
+
 
 
 
@@ -226,7 +238,7 @@ void http_route_handler(){
     for (int i = 0; i < http_routecounter; ++i)
     {
         // checks if both route and method is correct.
-        if((strcmp(header.route, http_routes[i]->route) == 0) && (strcmp(header.method, http_routes[i]->method) == 0)){
+        if(((strcmp(header.route, http_routes[i]->route) == 0) && (strcmp(header.method, http_routes[i]->method) == 0)) || (strcmp(header.method, "HEAD") == 0)){
             (*(http_routes[i]->http_routefunction))();
             return;
         }
@@ -291,6 +303,37 @@ char* http_get_parameter(char* variable, int mode){
     }
     free(parameter);
     return NULL;
+}
+
+/**************************************************************
+    Summery: 
+
+    Looks to find cookie and returns its value.
+
+    @PARAMS: name of cookie
+    @returns: value of cookie, NULL on error.
+**************************************************************/
+char* http_get_cookie(char* cookie_name){
+
+    char* cookies = malloc(strlen(header.cookies)+1);
+    strcpy(cookies, header.cookies);
+
+    if(header.cookies != NULL){
+        char* current_cookie = strtok(cookies, " ");
+        while(current_cookie != NULL && (strstr(current_cookie, cookie_name) == NULL)){
+            current_cookie = strtok(NULL, " ");
+        }
+
+        char* cookie = strtok(current_cookie, "=");
+        cookie = strtok(NULL, ";");
+
+        free(cookies);
+        return cookie;
+    }
+
+    free(cookies);
+    return NULL;
+
 }
 
 
@@ -364,21 +407,22 @@ void http_sendfile(char* file){
     char* file_ext = strtok(file_copy, ".");
     file_ext = strtok(NULL, ".");
 
-    if(strcmp(file_ext, "jpg") == 0 || strcmp(file_ext, "png") == 0 || strcmp(file_ext, "jpeg") == 0 || strcmp(file_ext, "ico") == 0){
-        http_add_content_type("image/gif");
-    } else if(strcmp(file_ext, "html") == 0){
-        http_add_content_type("text/html");
-    } else if(strcmp(file_ext, "js") == 0){
-        http_add_content_type("text/javascript;charset=UTF-8");
-    } else {
-        http_add_content_type("text/plain");
+    char* content_type = find_content_type(file_ext);
+    if(content_type == NULL){
+        printf(KRED "%s %s PID: %ld, PORT: %d!.\n" KWHT, "[ERROR] Could not find file type for ", file_ext, (long)getpid(), current_port);
+        intHandler();
+        close(http_client);
+        exit(EXIT_FAILURE);
     }
+
+    http_add_content_type(content_type);
 
      // open reponse file
     FILE *fp = fopen(file, "rb");
     if ( NULL == fp ) {
         perror("FILE");
-        http_free_routes();
+        intHandler();
+        close(http_client);
         exit(EXIT_FAILURE);
     }
     int fd = fileno(fp);
@@ -412,23 +456,26 @@ void http_sendfile(char* file){
     char buff[content_size+100+strlen(http_response_header)];
 
     //server response header HTTP format
-    char *header = "HTTP/1.1 200 OK\n";
+    char *header_text = "HTTP/1.1 200 OK\n";
     // add content length and content
-    strcpy(buff, header);
+    strcpy(buff, header_text);
     // add custom http_response_header
     strcat(buff, http_response_header);
     // add content length header
-    strcat(buff, "Content-Length: ");
-    strcat(buff, filesizestr);
+    if(strcmp(header.method, "HEAD") != 0){
+        strcat(buff, "Content-Length: ");
+        strcat(buff, filesizestr);
+    }
+
     strcat(buff, "\n\n");
 
     // write header
     write(http_client, buff, strlen(buff));
 
     // write content
-    write(http_client, content, content_size);
-
-    write(http_client, buff, strlen(buff));
+     if(strcmp(header.method, "HEAD") != 0){
+        write(http_client, content, content_size);
+    }
 
 }
 
@@ -513,14 +560,11 @@ void http_parser(char* buffer, char* content){
 
     char* host = NULL;
     char* connection = NULL;
-    char* line = strtok(NULL, "\n");
-
     char* content_type_raw = NULL;
-    while(line != NULL){
+    char* cookies = NULL;
 
-        /*
-            if line is longer than X, return 400 bad request.
-        */
+    char* line = strtok(NULL, "\n");
+    while(line != NULL){
 
         // break on end of header
         if(strcmp(line, " ") < 0){
@@ -540,6 +584,10 @@ void http_parser(char* buffer, char* content){
             connection = line;
         }
 
+        if(strstr(line, "Cookie:") != NULL){
+            cookies = line;
+        } 
+
         header.headers[header.total_headers] = line;
         header.total_headers++;
 
@@ -554,7 +602,7 @@ void http_parser(char* buffer, char* content){
     */
     if(host == NULL){
         http_400(http_client);
-        exit(1);
+        exit(EXIT_FAILURE);
     }
 
     // handle potential keep alive header
@@ -579,6 +627,15 @@ void http_parser(char* buffer, char* content){
         }
 
         header.content = content;
+    }
+
+    // parse cookies
+    if(cookies != NULL){
+        char* cookies_parsed = strtok(cookies, " ");
+        cookies_parsed = strtok(NULL, " ");
+        header.cookies = cookies_parsed;
+    } else {
+        header.cookies = "";
     }
 
     // check for uri query
@@ -615,7 +672,7 @@ void sigpipe_handler()
     close(http_client);
     if(debug)
         printf(KMAG "%s PID: %ld, PORT %d!.\n" KWHT, "[DEBUG] Child process ended! - ", (long)getpid(), current_port);
-    exit(0);
+    exit(EXIT_FAILURE);
 }
 
 /**************************************************************
@@ -627,10 +684,9 @@ void sigpipe_handler()
     @returns: VOID
 **************************************************************/
 void http_handle_request(char* buffer){
-    //child ->
-    const char *delim = "\r\n\r\n";
 
-    signal(SIGPIPE,sigpipe_handler);
+    //content header delimiter
+    const char *delim = "\r\n\r\n";
 
     if(debug){
         printf(KYEL "%s\n" KWHT, buffer);
@@ -664,6 +720,7 @@ void http_handle_request(char* buffer){
 
             int retval = select(FD_SETSIZE, &readSockSet, NULL, NULL, &timeout);
             if(retval > 0){
+                // recv buffer
                 char buffer2[HTTP_BUFFER_SIZE-1] = {0};
                 int valread = recv(http_client, buffer2, HTTP_BUFFER_SIZE, 0);
                 buffer2[HTTP_BUFFER_SIZE-2] = 0;
@@ -673,9 +730,13 @@ void http_handle_request(char* buffer){
                     empty_request_limit--;
                     continue;
                 } else {
+                    // reset header
                     free(http_response_header);
                     http_setup_header();
-                    printf("%s\n", "[CHILD] Handling new request!");
+                    header.total_headers = 0;
+                    printf(KGRN "%s\n" KWHT, "[CHILD] Handling new request!");
+
+                    // handle next request.
                     http_handle_request(buffer2);
                     return;
                 }
@@ -716,6 +777,7 @@ void http_handle_request(char* buffer){
 **************************************************************/
 void http_start(int PORT, int debugmode){
     struct sockaddr_in address, client_addr;
+    client_addr.sin_port = 0;
 
     printf(KBLU "%s %d\n" KWHT, "[STARTUP] Starting HTTP server on port", PORT);
     debug = debugmode;
@@ -740,20 +802,12 @@ void http_start(int PORT, int debugmode){
 
     printf(KBLU "%s\n" KWHT, "[STARTUP] TCP socket succesfully created.");
 
-    //define sockaddr_in struct variables
     /*
     The htons() function makes sure that numbers are stored in memory in network byte order, which is with the most significant byte first.
     */
     address.sin_family = AF_INET;
     address.sin_addr.s_addr = INADDR_ANY;
     address.sin_port = htons( PORT );
-
-    /*
-    The C library function void *memset(void *str, int c, size_t n)
-    copies the character c (an unsigned char) to the first n
-    characters of the string pointed to, by the argument str.
-    */
-
     memset(address.sin_zero, '\0', sizeof(address.sin_zero));
 
     if (setsockopt(http_server_fd, SOL_SOCKET, SO_REUSEADDR, &(int){1}, sizeof(int)) < 0)
@@ -777,21 +831,11 @@ void http_start(int PORT, int debugmode){
 
     printf(KBLU "%s\n" KWHT, "[STARTUP] Server now accepting requests...");
 
+    // signal handling
     signal(SIGINT, intHandler);
+    signal(SIGPIPE,sigpipe_handler);
 
     // setup for response header;
-
-    // check for headers in waitlist
-    if(http_total_custom_header > 0){
-        for (int i = 0; i < http_total_custom_header; ++i)
-        {
-            // add headers in waitlist
-            http_add_responseheader(http_custom_headers[i]);
-        }
-    }
-
-    client_addr.sin_port = 0;
-
     http_setup_header();
 
     //listen loop
@@ -800,8 +844,6 @@ void http_start(int PORT, int debugmode){
         /*
             Main to accept new clients
         */
-        //accpet new socket connection
-        //int accept(int sockfd, struct sockaddr *addr, socklen_t *addrlen);
         if ((http_client = accept(http_server_fd, (struct sockaddr *)&client_addr, (socklen_t*)&addrlen)) < 0)
         {
             //error handling
@@ -854,6 +896,8 @@ void http_start(int PORT, int debugmode){
             } else {
                 // if select timed out
                 printf("%s PID: %ld, PORT: %d\n", "[DEBUG] Incomming connection timed out!", (long)getpid(), current_port);
+                if(debug)
+                    printf(KMAG "%s PID: %ld, PORT %d!.\n" KWHT, "[DEBUG] Child process ended! - ", (long)getpid(), current_port);
                 close(http_client);
                 intHandler();
             }

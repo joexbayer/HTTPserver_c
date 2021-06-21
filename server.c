@@ -24,6 +24,9 @@ void login(){
 
     if(strcmp(username, "joe") == 0 && strcmp(password, "123") == 0){
 
+
+        http_add_cookie("login", "true");
+
         http_redirect("/?success=1");
         return;
     }
@@ -39,8 +42,6 @@ int main()
     http_addroute("GET", "/text", &text);
     http_addroute("GET", "/favicon.ico", &favicon);
     http_addfolder("/");
-
-    http_add_responseheader("Content-Security-Policy: script-src 'unsafe-inline';");
 
     // http_start(PORT, DEBUG)
     http_start(8081, 1);

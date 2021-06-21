@@ -3,6 +3,6 @@
 
 int http_400(int client);
 int http_404(int client);
-int http_301(int client, char* location);
+int http_301(int client, char* location, char* extra_headers);
 
 #endif

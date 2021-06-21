@@ -51,15 +51,16 @@ int http_404(int client){
     @PARAMS: client fd, location string
     @returns: VOID
 **************************************************************/
-int http_301(int client, char* location){
+int http_301(int client, char* location, char* extra_headers){
 
     char *pre_header = "HTTP/1.1 301 Moved Permanently\nConnection: Close\nLocation: ";
-    int header_length = strlen(pre_header)+strlen(location)+3;
+    int header_length = strlen(pre_header)+strlen(location)+strlen(extra_headers)+3;
 
     char header[header_length];
 
     strcpy(header, pre_header);
     strcat(header, location);
+    strcat(header, extra_headers);
     strcat(header, "\n\n");
     header[header_length] = 0;
 
